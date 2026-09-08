@@ -291,6 +291,8 @@ function Attach.Start()
   Attach.MarkDirty()
 end
 
+--- Every write to the rule set changes which events can change a verdict, so a store that
+--- only marked dirty would evaluate once and then freeze.
 function Attach.Refresh()
   RegisterTriggers()
   Attach.MarkDirty()

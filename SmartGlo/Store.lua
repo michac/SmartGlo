@@ -68,7 +68,7 @@ function Store.SetForSubject(spellID, list)
   end
   for _, glow in ipairs(list) do kept[#kept + 1] = glow end
   db.glows = kept
-  ns.Attach.MarkDirty()
+  ns.Attach.Refresh()
   ns.Count.Rebuild()
   return true
 end
@@ -83,7 +83,7 @@ function Store.Replace(list)
   end
   if #errs > 0 then return nil, errs end
   db.glows = list
-  ns.Attach.MarkDirty()
+  ns.Attach.Refresh()
   ns.Count.Rebuild()
   return true
 end
