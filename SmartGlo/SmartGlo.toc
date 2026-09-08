@@ -2,5 +2,5 @@
 ## Title: Smart Glo
 ## Notes: Rule-driven glows on Cooldown Manager icons.
 ## Author: Michael Christiansen
-## Version: 0.0.0
+## Version: 0.1.0
 Core.lua
