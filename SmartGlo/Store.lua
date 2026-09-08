@@ -114,6 +114,37 @@ ns.RegisterCommand{
 }
 
 ns.RegisterCommand{
+  name = "color",
+  args = "<name>",
+  desc = "recolour every applied rule",
+  handler = function(rest)
+    local name = string.lower(string.match(rest or "", "^(%S*)"))
+    if name == "" or not ns.Look.IsColor(name) then
+      ns.Printf("colours: %s", table.concat(ns.Look.Names(), ", "))
+      return
+    end
+    local list = {}
+    for _, glow in ipairs(glows()) do
+      glow.color = name
+      list[#list + 1] = glow
+    end
+    local ok, errs = Store.Replace(list)
+    if ok == nil then
+      for _, err in ipairs(errs) do ns.Print("  " .. err) end
+      return
+    end
+    -- A gate retints in place; a count's hue is baked into the file its band names, so its
+    -- container has to be rebuilt, and that cannot happen in combat.
+    ns.Count.Rebuild()
+    if InCombatLockdown() then
+      ns.Printf("%s -- borders now; count marks recolour on /sg rearm out of combat.", name)
+    else
+      ns.Printf("%s.", name)
+    end
+  end,
+}
+
+ns.RegisterCommand{
   name = "list",
   desc = "every rule currently applied",
   handler = function()
@@ -128,8 +159,9 @@ ns.RegisterCommand{
       if glow.count then
         bits[#bits + 1] = ("count(%d) >= %d"):format(glow.count.aura, glow.count.threshold)
       end
-      ns.Printf("  %d. %s |cff999999on %s -- %s|r", i, glow.name or "(unnamed)",
-        ns.SpellLabel(glow.subject), table.concat(bits, " + "))
+      ns.Printf("  %d. %s |cff999999on %s -- %s [%s]|r", i, glow.name or "(unnamed)",
+        ns.SpellLabel(glow.subject), table.concat(bits, " + "),
+        glow.color or ns.Look.DEFAULT)
     end
   end,
 }

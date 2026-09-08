@@ -119,6 +119,10 @@ function Rules.CheckGlow(glow)
       table.insert(errs, "a count element needs a numeric threshold")
     end
   end
+  if glow.color ~= nil and not ns.Look.IsColor(glow.color) then
+    table.insert(errs, ("unknown colour %q; known: %s"):format(tostring(glow.color),
+      table.concat(ns.Look.Names(), ", ")))
+  end
   if glow.show == nil and glow.count == nil then
     table.insert(errs, "a glow needs a `show` expression, a `count` element, or both")
   end

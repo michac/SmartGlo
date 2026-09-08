@@ -214,13 +214,13 @@ function Attach.Evaluate()
     if glow.count ~= nil then
       ns.Count.SetGate(glow, open)
     elseif open then
-      lit[glow.subject] = true
+      lit[glow.subject] = glow.color or ns.Look.DEFAULT
     end
   end
   for subject in pairs(bound) do
     local f = ns.Overlay.For(subject)
     f:SetShown(not editing)
-    ns.Overlay.SetLit(f, lit[subject] == true)
+    ns.Overlay.SetLit(f, lit[subject] ~= nil, lit[subject])
   end
 end
 

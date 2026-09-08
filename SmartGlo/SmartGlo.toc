@@ -6,6 +6,7 @@
 ## SavedVariables: SmartGloDB
 
 Core.lua
+Look.lua
 Rules.lua
 Wire.lua
 Profiles.lua

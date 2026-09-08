@@ -1,4 +1,4 @@
--- The one fixed look: a thin border inside the icon, on our own frame, keyed by subject.
+-- The overlay: one frame per subject, carrying the look on our own texture.
 --
 -- Anchored two-point to the item frame and never PARENTED to it -- re-parenting a CDM item
 -- frame breaks the viewer's pandemic-frame anchor chain, re-anchoring does not
@@ -9,39 +9,24 @@ local _, ns = ...
 local Overlay = {}
 ns.Overlay = Overlay
 
-local INSET = 3
-local THICKNESS = 2
 local LEVEL_ABOVE_ITEM = 5
-local COLOR = { 1.0, 0.82, 0.25, 1.0 }
 
 local frames = {}
-
-local function Edge(parent)
-  local tex = parent:CreateTexture(nil, "OVERLAY")
-  tex:SetColorTexture(COLOR[1], COLOR[2], COLOR[3], COLOR[4])
-  return tex
-end
 
 local function Build()
   local f = CreateFrame("Frame", nil, UIParent)
   f:SetFrameStrata("MEDIUM")
   f:Hide()
 
-  local top, bottom, left, right = Edge(f), Edge(f), Edge(f), Edge(f)
-  top:SetPoint("TOPLEFT", f, "TOPLEFT", INSET, -INSET)
-  top:SetPoint("TOPRIGHT", f, "TOPRIGHT", -INSET, -INSET)
-  top:SetHeight(THICKNESS)
-  bottom:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", INSET, INSET)
-  bottom:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -INSET, INSET)
-  bottom:SetHeight(THICKNESS)
-  left:SetPoint("TOPLEFT", top, "BOTTOMLEFT", 0, 0)
-  left:SetPoint("BOTTOMLEFT", bottom, "TOPLEFT", 0, 0)
-  left:SetWidth(THICKNESS)
-  right:SetPoint("TOPRIGHT", top, "BOTTOMRIGHT", 0, 0)
-  right:SetPoint("BOTTOMRIGHT", bottom, "TOPRIGHT", 0, 0)
-  right:SetWidth(THICKNESS)
+  -- The white master, tinted here: our own texture reaches VertexColor, which the count
+  -- sink's inline escape never can.
+  local mark = f:CreateTexture(nil, "OVERLAY")
+  mark:SetTexture(ns.Look.MASTER)
+  mark:SetPoint("CENTER")
+  mark:Hide()
+  ns.Look.Spin(mark)
 
-  f.border = { top, bottom, left, right }
+  f.mark = mark
   return f
 end
 
@@ -60,12 +45,6 @@ function Overlay.Existing()
   return frames
 end
 
-local function SetBorderShown(f, shown)
-  for _, tex in ipairs(f.border) do
-    tex:SetShown(shown)
-  end
-end
-
 --- `SetScale` at pool acquire leaves GetWidth reading 50 at every icon-size setting, so the
 --- overlay takes the item's EFFECTIVE scale and its own units then match the icon's.
 function Overlay.Anchor(f, item)
@@ -80,6 +59,11 @@ function Overlay.Anchor(f, item)
   if levelOk and type(level) == "number" then
     f:SetFrameLevel(level + LEVEL_ABOVE_ITEM)
   end
+  local width = f:GetWidth()
+  if type(width) == "number" and width > 0 then
+    local size = width * ns.Look.FRACTION
+    f.mark:SetSize(size, size)
+  end
   f:Show()
 end
 
@@ -88,6 +72,8 @@ function Overlay.Detach(f)
   f:Hide()
 end
 
-function Overlay.SetLit(f, lit)
-  SetBorderShown(f, lit)
+function Overlay.SetLit(f, lit, color)
+  local rgb = ns.Look.Rgb(color)
+  f.mark:SetVertexColor(rgb[1], rgb[2], rgb[3])
+  f.mark:SetShown(lit)
 end

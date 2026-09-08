@@ -9,33 +9,34 @@ local _, ns = ...
 local Count = {}
 ns.Count = Count
 
-local MARK = "Interface\\AddOns\\SmartGlo\\Media\\mark"
 local CELL = 50
-local MARK_FRACTION = 0.36
 
 local containers = {}
 local wanted = {}
 local state = {}
 
+--- The colour is part of the key: a band's hue is baked into the file it names, so changing
+--- it means a new container rather than a re-armed sink.
 local function KeyOf(glow)
-  return ("%d:%d:%d"):format(glow.subject, glow.count.aura, glow.count.threshold)
+  return ("%d:%d:%d:%s"):format(glow.subject, glow.count.aura, glow.count.threshold,
+    glow.color or ns.Look.DEFAULT)
 end
 
 local function Note(key, text)
   state[key] = text
 end
 
---- A colour escape tints a band's TEXT and leaves an inline texture at full white, so the
---- mark is a pre-tinted file rather than art plus a hue.
-local function Bands(threshold, size)
-  local escape = ("|T%s:%d:%d|t"):format(MARK, size, size)
+--- The band carries the escape ALONE: a rotation turns about the run's centre, and a numeral
+--- beside the mark would move that centre off the mark.
+local function Bands(threshold, size, color)
+  local escape = ("|T%s:%d:%d|t"):format(ns.Look.File(color), size, size)
   return {
     { threshold = 0, format = "" },
     { threshold = threshold, format = escape },
   }
 end
 
-local function Formatter(threshold, size)
+local function Formatter(threshold, size, color)
   local util = C_StringUtil
   if type(util) ~= "table" or type(util.CreateNumericRuleFormatter) ~= "function" then
     return nil, "C_StringUtil.CreateNumericRuleFormatter is absent"
@@ -44,7 +45,7 @@ local function Formatter(threshold, size)
   if not okMake or fmt == nil then
     return nil, "CreateNumericRuleFormatter refused: " .. tostring(fmt)
   end
-  local okSet, err = pcall(fmt.SetBreakpoints, fmt, Bands(threshold, size))
+  local okSet, err = pcall(fmt.SetBreakpoints, fmt, Bands(threshold, size, color))
   if not okSet then return nil, "SetBreakpoints refused: " .. tostring(err) end
   return fmt
 end
@@ -67,7 +68,7 @@ local function Arm(host, glow, key)
 
   local width = host:GetWidth()
   if type(width) ~= "number" or width <= 0 then width = CELL end
-  local size = math.floor(width * MARK_FRACTION)
+  local size = math.floor(width * ns.Look.FRACTION)
 
   local armed = false
   local okSlot, slotErr = pcall(container.AddAuraSlot, container, "count", "HELPFUL", {
@@ -79,18 +80,21 @@ local function Arm(host, glow, key)
       button:SetSize(width, width)
       button:SetAllPoints(container)
 
-      local fmt, why = Formatter(glow.count.threshold, size)
+      local fmt, why = Formatter(glow.count.threshold, size, glow.color)
       if fmt == nil then
         Note(key, why)
         return
       end
+      -- Centred is safe here where it would not be for a numeral: the string has one
+      -- non-empty state, so its width never varies under the player.
       local fs = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-      fs:SetPoint("TOPLEFT", button, "TOPLEFT", 2, -2)
+      fs:SetPoint("CENTER", button, "CENTER", 0, 0)
       local okSink, sinkErr = pcall(button.SetApplicationCount, button, fs, { formatter = fmt })
       if not okSink then
         Note(key, "SetApplicationCount refused: " .. tostring(sinkErr))
         return
       end
+      ns.Look.Spin(fs)
       armed = true
     end,
   })
