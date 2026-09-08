@@ -1,0 +1,6 @@
+## Interface: 120100
+## Title: Smart Glo
+## Notes: Rule-driven glows on Cooldown Manager icons.
+## Author: Michael Christiansen
+## Version: 0.0.0
+Core.lua
