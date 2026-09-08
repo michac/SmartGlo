@@ -3,4 +3,14 @@
 ## Notes: Rule-driven glows on Cooldown Manager icons.
 ## Author: Michael Christiansen
 ## Version: 0.1.0
+## SavedVariables: SmartGloDB
+
 Core.lua
+Rules.lua
+Wire.lua
+Profiles.lua
+Store.lua
+Overlay.lua
+Attach.lua
+Count.lua
+Config.lua

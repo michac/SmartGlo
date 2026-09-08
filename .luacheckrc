@@ -16,13 +16,43 @@ std = "lua51+wow"
 
 stds.wow = {
   read_globals = {
-    -- The loader frame — Core.lua. It holds the PLAYER_LOGIN registration and nothing else.
+    -- Core.lua — the loader frame, the secret-value class check, spell names for chat.
     "CreateFrame",
+    "issecretvalue",
+    "C_Spell",
+
+    -- Rules.lua — the readable vocabulary: secondary resources and the cooldown info table.
+    "UnitPower",
+    "Enum",
+
+    -- Overlay.lua / Config.lua — our own frames hang off the screen, never off a CDM icon.
+    "UIParent",
+
+    -- Attach.lua — riding the Cooldown Manager: the viewers, the item mixins, the hooks.
+    "hooksecurefunc",
+    "C_Timer",
+    "C_CooldownViewer",
+    "EventRegistry",
+
+    -- Count.lua — the managed aura container and the authored numeric formatter.
+    "C_AddOns",
+    "C_StringUtil",
+    "InCombatLockdown",
+
+    -- Wire.lua — serialize, compress and base64, all three shipped by the client.
+    "C_EncodingUtil",
+
+    -- Config.lua — the four viewer globals the subject dropdown enumerates.
+    "EssentialCooldownViewer",
+    "UtilityCooldownViewer",
+    "BuffIconCooldownViewer",
+    "BuffBarCooldownViewer",
   },
-  -- The addon's true global writes. Only the slash registration, which has to be global
-  -- because that is the interface the client reads it through.
+  -- The addon's true global writes: the slash registration, which has to be global because
+  -- that is the interface the client reads it through, and the SavedVariables table.
   globals = {
     "SLASH_SMARTGLO1",
     "SlashCmdList",
+    "SmartGloDB",
   },
 }
