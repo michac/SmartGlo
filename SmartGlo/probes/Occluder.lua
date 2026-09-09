@@ -159,9 +159,14 @@ ns.RegisterCommand{
 
     if what == "crop" then
       local n = tonumber(value)
-      if n == nil or n <= ns.Look.FRACTION or n > 0.95 then
-        ns.Printf("usage: /sg tune crop 0.82   (above %.2f so it covers the mark, under 0.95 "
-          .. "so it stays inside the rounded corners)", ns.Look.FRACTION)
+      -- 1.0 is allowed on purpose: it is the ONE crop with no residual at any width (0..64
+      -- texels drawn at exactly `width`, both integers), so it is the only candidate that
+      -- cannot be invalidated by moving the icon-size slider. What it costs is the corners --
+      -- our copy is unmasked where the real icon is rounded.
+      if n == nil or n <= ns.Look.FRACTION or n > 1.0 then
+        ns.Printf("usage: /sg tune crop 0.82   (above %.2f so it covers the mark, at most 1.0; "
+          .. "1.0 is exact at every size but redraws the rounded corners square)",
+          ns.Look.FRACTION)
         return
       end
       ns.Look.OCCLUDE = n
