@@ -15,11 +15,16 @@ Look.DEFAULT = "yellow"
 Look.FRACTION = 0.72
 Look.SPIN_SECONDS = 3
 
---- The window the occluder's crop is CHOSEN from, not the crop itself. The floor is above
---- FRACTION so the occluder always covers the mark whole; the ceiling keeps it well inside the
---- corners the Cooldown Manager's mask rounds.
-Look.OCCLUDE_MIN = 0.74
-Look.OCCLUDE_MAX = 0.88
+--- MEASURED BY EYE on a live Essential row, which is the only oracle this has. It is above
+--- FRACTION so the occluder covers the mark whole, and well inside the corners the Cooldown
+--- Manager's mask rounds.
+---
+--- ⚠ Do NOT "improve" this by arithmetic. A search that minimised how far the drawn size has
+--- to round picked 0.78125 over this, on the reasoning that its residual is six times smaller
+--- -- and the result visibly RESIZED the icon where this does not. Whatever governs the
+--- apparent scale of an inline escape, it is not that residual, and no model here predicts the
+--- reading. `/sg tune crop <n>` is how a replacement gets chosen: on the real row, by looking.
+Look.OCCLUDE = 0.82
 
 --- Sub-unit trim, in the FontString's own coordinate space. The escape's own offsets are
 --- integers (`%d`), so anything finer than a unit has to move the region instead of the art.
@@ -69,36 +74,20 @@ Look.MASTER = "Interface\\AddOns\\SmartGlo\\Media\\hex-white"
 ---
 --- Sizes are in the FONTSTRING'S coordinate space, never screen pixels, so `width` must come
 --- from `GetWidth()` on the frame the string is drawn in.
---- Which crop to take, given the width it will be drawn at. Both ends quantise -- the crop to
---- whole TEXELS of a 64px file, the draw to whole UNITS of the host frame, because
---- `CreateTextureMarkup` emits every field with `%d` -- and the two grids rarely agree. A crop
---- whose drawn size has to round is drawn over a region it does not match, which reads as the
---- icon shifting when the occluder appears.
----
---- So the crop is SEARCHED rather than named: every whole-texel crop in the window, ranked by
---- how far its drawn size has to round, smallest crop breaking a tie. The window's floor is
---- what guarantees coverage of the mark; which crop inside it wins is arithmetic, and it
---- differs per width -- 50-unit Essential, 30-unit Utility and 40-unit BuffIcon rows do not
---- share an answer.
 --- One candidate: the crop `half` texels either side of the file's centre, and what it costs
---- to draw at `width`.
+--- to draw at `width`. Both ends quantise -- the crop to whole TEXELS of a 64px file, the draw
+--- to whole UNITS of the host frame, because `CreateTextureMarkup` emits every field with
+--- `%d` -- so `residual` is how far the draw had to round. It is REPORTED, not minimised.
 function Look.CropAt(width, half)
   local want = width * (2 * half) / ICON_FILE_SIZE
   local size = math.floor(want + 0.5)
   return { half = half, size = size, residual = size - want }
 end
 
+--- The crop in force. `residual` is reported rather than minimised -- it is a diagnostic the
+--- probe prints, not a thing to optimise against (see OCCLUDE).
 function Look.ChooseCrop(width)
-  local best
-  local lo = math.ceil(ICON_FILE_SIZE * Look.OCCLUDE_MIN / 2)
-  local hi = math.floor(ICON_FILE_SIZE * Look.OCCLUDE_MAX / 2)
-  for half = lo, hi do
-    local candidate = Look.CropAt(width, half)
-    if best == nil or math.abs(candidate.residual) < math.abs(best.residual) - 1e-9 then
-      best = candidate
-    end
-  end
-  return best
+  return Look.CropAt(width, math.floor(ICON_FILE_SIZE * Look.OCCLUDE / 2 + 0.5))
 end
 
 --- The crop is snapped to whole texels about the file's centre, so the crop's own centre is

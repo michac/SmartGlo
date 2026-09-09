@@ -4,7 +4,7 @@
 --            product, so the alignment has to be settled where nothing is sealed.
 -- opened:    2026-09-08
 -- expires:   2026-09-22
--- lands-in:  Look.OCCLUDE_MIN / _MAX / _X / _Y
+-- lands-in:  Look.OCCLUDE / _X / _Y
 --@endprobe
 --
 -- Nothing here is sealed and no aura container is built: the question is geometry. Each tile
@@ -73,7 +73,7 @@ end
 local function Build(subject, icon, width, scale)
   local step = width + PAD
   local chosen = ns.Look.ChooseCrop(width)
-  local halves = { chosen.half - 2, chosen.half - 1, chosen.half, chosen.half + 1 }
+  local halves = { chosen.half - 1, chosen.half, chosen.half + 1, chosen.half + 2 }
 
   local f = CreateFrame("Frame", nil, UIParent, "BasicFrameTemplateWithInset")
   f:SetScale(scale)
@@ -151,13 +151,22 @@ ns.RegisterCommand{
 
 ns.RegisterCommand{
   name = "tune",
-  args = "x <n> | y <n> | show",
-  desc = "nudge the live occluder's sub-unit trim and re-arm",
+  args = "crop <n> | x <n> | y <n> | show",
+  desc = "change the live occluder's crop or trim and re-arm",
   handler = function(rest)
     local what, value = string.match(rest or "", "^(%S*)%s*(%S*)$")
     what = string.lower(what or "")
 
-    if what == "x" or what == "y" then
+    if what == "crop" then
+      local n = tonumber(value)
+      if n == nil or n <= ns.Look.FRACTION or n > 0.95 then
+        ns.Printf("usage: /sg tune crop 0.82   (above %.2f so it covers the mark, under 0.95 "
+          .. "so it stays inside the rounded corners)", ns.Look.FRACTION)
+        return
+      end
+      ns.Look.OCCLUDE = n
+      ns.Count.Rearm()
+    elseif what == "x" or what == "y" then
       local n = tonumber(value)
       if n == nil then
         ns.Print("usage: /sg tune x -0.25   (units, not pixels; the FontString's own space)")
@@ -167,12 +176,12 @@ ns.RegisterCommand{
       -- A formatter is fixed at handover, so a trim change is a fresh container.
       ns.Count.Rearm()
     elseif what ~= "" and what ~= "show" then
-      ns.Print("usage: /sg tune x <n> | /sg tune y <n> | /sg tune show")
+      ns.Print("usage: /sg tune crop <n> | /sg tune x <n> | /sg tune y <n> | /sg tune show")
       return
     end
 
-    ns.Printf("trim %+.2f,%+.2f |cff999999(session only -- it is not saved)|r",
-      ns.Look.OCCLUDE_X, ns.Look.OCCLUDE_Y)
+    ns.Printf("crop %.5f, trim %+.2f,%+.2f |cff999999(session only -- it is not saved)|r",
+      ns.Look.OCCLUDE, ns.Look.OCCLUDE_X, ns.Look.OCCLUDE_Y)
     for _, subject in ipairs(ns.Store.Subjects()) do
       local icon, width = Resolve(subject)
       if icon ~= nil then
