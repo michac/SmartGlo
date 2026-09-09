@@ -26,9 +26,20 @@ Look.SPIN_SECONDS = 3
 --- reading. `/sg tune crop <n>` is how a replacement gets chosen: on the real row, by looking.
 Look.OCCLUDE = 0.82
 
---- Sub-unit trim, in the FontString's own coordinate space. The escape's own offsets are
---- integers (`%d`), so anything finer than a unit has to move the region instead of the art.
-Look.OCCLUDE_X = 0
+--- Trim, in the FontString's own coordinate space, on the region's anchor rather than in the
+--- escape -- the escape's own offsets are integers and this is not one.
+---
+--- MEASURED BY EYE: an escape centred in a FontString does not draw centred. At a 41-unit
+--- draw in a 50-unit frame the art sits ~1.2 units LEFT of the region's centre, which is what
+--- `SetPoint` puts back. Consistent with the escape claiming more advance width than its ink
+--- fills, the excess trailing -- centring then centres the CLAIM and not the picture.
+---
+--- ⚠ It is NOT the drawn size rounding to a whole unit. That was the first theory and it is
+--- dead: the shift survived a crop of 1.0, where the residual is exactly zero.
+--- ⚠ OPEN: whether 1.2 is a constant in units or a fraction of the draw. One value cannot
+--- tell them apart. Move the Edit Mode icon-size slider and look again -- if it still lands
+--- the offset is constant, and if it drifts it belongs here as a ratio instead.
+Look.OCCLUDE_X = 1.2
 Look.OCCLUDE_Y = 0
 
 --- Spell icons are 64x64 files. The crop is expressed to `CreateTextureMarkup` as fractions
