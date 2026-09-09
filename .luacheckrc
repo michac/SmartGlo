@@ -29,6 +29,7 @@ stds.wow = {
     "UIParent",
 
     -- Attach.lua — riding the Cooldown Manager: the viewers, the item mixins, the hooks.
+    -- C_Timer is also Count.lua's respin ticker.
     "hooksecurefunc",
     "C_Timer",
     "C_CooldownViewer",

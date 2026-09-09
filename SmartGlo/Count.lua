@@ -14,6 +14,9 @@ local CELL = 50
 local containers = {}
 local wanted = {}
 local state = {}
+local spins = {}
+local restarts = {}
+local ticker
 
 --- The colour is part of the key: a band's hue is baked into the file it names, so changing
 --- it means a new container rather than a re-armed sink.
@@ -71,6 +74,7 @@ local function Arm(host, glow, key)
   local size = math.floor(width * ns.Look.FRACTION)
 
   local armed = false
+  local spin
   local okSlot, slotErr = pcall(container.AddAuraSlot, container, "count", "HELPFUL", {
     candidateFilters = {
       includeSpellIDs = { [glow.count.aura] = true },
@@ -94,7 +98,7 @@ local function Arm(host, glow, key)
         Note(key, "SetApplicationCount refused: " .. tostring(sinkErr))
         return
       end
-      ns.Look.Spin(fs)
+      spin = ns.Look.Spin(fs)
       armed = true
     end,
   })
@@ -119,6 +123,8 @@ local function Arm(host, glow, key)
     return nil
   end
   Note(key, "armed on aura " .. glow.count.aura)
+  spins[key] = spin
+  restarts[key] = 0
   container:Hide()
   return container
 end
@@ -139,6 +145,8 @@ function Count.Rebuild()
       container:Hide()
       containers[key] = nil
       state[key] = nil
+      spins[key] = nil
+      restarts[key] = nil
     end
   end
 
@@ -179,15 +187,45 @@ function Count.Describe(subject)
   return "no count element"
 end
 
+--- An animation does not advance while its region is hidden, and this sink's FontString is
+--- shown by the client rather than by us. Restarting only a STOPPED group leaves a running
+--- one alone, and the restart count says how often the client is cycling it.
+local function Respin()
+  for key, group in pairs(spins) do
+    local container = containers[key]
+    if container ~= nil and container:IsShown() then
+      local ok, playing = pcall(group.IsPlaying, group)
+      if ok and playing == false then
+        group:Play()
+        restarts[key] = (restarts[key] or 0) + 1
+      end
+    end
+  end
+end
+
 function Count.Start()
   Count.Rebuild()
+  if ticker == nil then
+    ticker = C_Timer.NewTicker(0.5, Respin)
+  end
 end
 
 function Count.ReportStatus()
   local any = false
   for key in pairs(wanted) do
     any = true
-    ns.Printf("  count %s: %s", key, state[key] or "no report")
+    local spin = "no spin group"
+    if spins[key] ~= nil then
+      local ok, playing = pcall(spins[key].IsPlaying, spins[key])
+      if not ok then
+        spin = "IsPlaying refused: " .. tostring(playing)
+      elseif ns.IsSecret(playing) then
+        spin = "IsPlaying is secret"
+      else
+        spin = ("spin playing=%s, restarts=%d"):format(tostring(playing), restarts[key] or 0)
+      end
+    end
+    ns.Printf("  count %s: %s |cff999999(%s)|r", key, state[key] or "no report", spin)
   end
   if not any then
     ns.Print("  no count elements.")
@@ -206,6 +244,8 @@ ns.RegisterCommand{
       container:Hide()
       containers[key] = nil
       state[key] = nil
+      spins[key] = nil
+      restarts[key] = nil
     end
     Count.Rebuild()
     Count.ReportStatus()
