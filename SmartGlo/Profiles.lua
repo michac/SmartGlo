@@ -17,11 +17,16 @@ Profiles.list = {
         subject = 105174,
         show = { t = "resource", power = "soul_shards", cmp = ">=", value = 3 },
       },
-      -- No gate: at zero imps and below the threshold the correct output is the same
-      -- nothing, so there is no absence case for a readable term to cover.
+      -- ⚠ The gate is not optional here. A count draws an OCCLUDER below the threshold, so
+      -- band 0 draws, so rule-language.md §6.4's absence case applies: with the aura gone the
+      -- client hides the button, the occluder goes with it, and the mark reads as six. Wild
+      -- Imps' Cooldown Manager buff is continuously present, which is what makes this safe.
+      -- `ready()` covers a separate hazard: the occluder is a static copy of the icon drawn
+      -- above the swipe, so a mark mid-cooldown would show an unswiped patch.
       {
         name = "Implosion at six imps",
         subject = 196277,
+        show = { t = "ready", spell = 196277 },
         count = { aura = 296553, threshold = 6 },
       },
     },

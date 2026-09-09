@@ -133,14 +133,8 @@ ns.RegisterCommand{
       for _, err in ipairs(errs) do ns.Print("  " .. err) end
       return
     end
-    -- A gate retints in place; a count's hue is baked into the file its band names, so its
-    -- container has to be rebuilt, and that cannot happen in combat.
-    ns.Count.Rebuild()
-    if InCombatLockdown() then
-      ns.Printf("%s -- borders now; count marks recolour on /sg rearm out of combat.", name)
-    else
-      ns.Printf("%s.", name)
-    end
+    -- Every mark is our own texture, so both kinds retint in place on the next evaluation.
+    ns.Printf("%s.", name)
   end,
 }
 

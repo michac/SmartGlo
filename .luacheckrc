@@ -25,11 +25,13 @@ stds.wow = {
     "UnitPower",
     "Enum",
 
+    -- Look.lua — the shipped escape builder, so no format string is hand-rolled here.
+    "CreateTextureMarkup",
+
     -- Overlay.lua / Config.lua — our own frames hang off the screen, never off a CDM icon.
     "UIParent",
 
     -- Attach.lua — riding the Cooldown Manager: the viewers, the item mixins, the hooks.
-    -- C_Timer is also Count.lua's respin ticker.
     "hooksecurefunc",
     "C_Timer",
     "C_CooldownViewer",
@@ -38,7 +40,6 @@ stds.wow = {
     -- Count.lua — the managed aura container and the authored numeric formatter.
     "C_AddOns",
     "C_StringUtil",
-    "InCombatLockdown",
 
     -- Wire.lua — serialize, compress and base64, all three shipped by the client.
     "C_EncodingUtil",

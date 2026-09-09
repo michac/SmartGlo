@@ -13,16 +13,17 @@ local LEVEL_ABOVE_ITEM = 5
 
 local frames = {}
 
---- An overlay is never HIDDEN once built. A count element's motion is armed before its
---- FontString is handed over, after which the group is forbidden to us — so a hide anywhere
---- above it stops a spin nothing can start again. Visibility is alpha, all the way down.
+--- Visibility is ALPHA, all the way down. The mark spins permanently rather than starting on
+--- a threshold — a count's crossing is never observed, so there is nothing to start it on —
+--- and an animation does not advance while an ancestor is hidden. Alpha composites over a
+--- turn that never stops.
 local function Build()
   local f = CreateFrame("Frame", nil, UIParent)
   f:SetFrameStrata("MEDIUM")
   f:SetAlpha(0)
 
-  -- The white master, tinted here: our own texture reaches VertexColor, which the count
-  -- sink's inline escape never can.
+  -- Our own Texture, tinted here and turning here. Both kinds of glow reveal THIS mark: a
+  -- gate by drawing it, a count by having the client take its occluder away.
   local mark = f:CreateTexture(nil, "OVERLAY")
   mark:SetTexture(ns.Look.MASTER)
   mark:SetPoint("CENTER")
@@ -33,8 +34,9 @@ local function Build()
   return f
 end
 
---- One persistent frame per subject: a count element's aura container is hosted on it and
---- may only be armed once, so the host cannot be pooled and rebuilt under it.
+--- One persistent frame per subject: a count element's aura container is hosted on it as a
+--- CHILD, which is what puts the occluder above the mark, and may only be armed once — so
+--- the host cannot be pooled and rebuilt under it.
 function Overlay.For(subject)
   local f = frames[subject]
   if f == nil then

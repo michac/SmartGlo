@@ -190,7 +190,10 @@ local function Flush()
   end
 
   lastFlush = { frames = seen, matched = matched }
-  ns.Count.Reanchor()
+  -- REBUILD, not re-anchor: an occluder is cropped from the icon the row is drawing and
+  -- sized in that row's own units, so a rebind or a resize needs a new container rather
+  -- than a moved one. Rebuild is keyed and idempotent, so an unchanged row costs nothing.
+  ns.Count.Rebuild()
   Attach.Evaluate()
 end
 
@@ -211,9 +214,13 @@ function Attach.Evaluate()
     if item ~= nil and not editing and IsShowing(item) then
       open = ns.Rules.Evaluate(glow.show) == ns.T
     end
+    -- Both kinds light the same mark. A gate glow shows it outright; a count glow shows it
+    -- with the occluder over it, and lets the client take the occluder away at the
+    -- threshold. So `open` means the same thing in both: the rule's readable half passed.
     if glow.count ~= nil then
       ns.Count.SetGate(glow, open)
-    elseif open then
+    end
+    if open then
       lit[glow.subject] = glow.color or ns.Look.DEFAULT
     end
   end
@@ -300,6 +307,24 @@ end
 
 function Attach.Bound()
   return bound
+end
+
+--- The fileID the row is DRAWING, which is not `C_Spell.GetSpellTexture(subject)`:
+--- `CooldownViewerItemDataMixin:GetSpellTexture` walks a ladder -- a spell-category icon, a
+--- live aura's own icon, an equip-slot texture, a linked spell, an override -- before it
+--- reaches the base spell. Reading the fileID back off the Icon region is that whole ladder's
+--- answer, so an occluder cropped from it matches whatever the player is looking at.
+function Attach.IconOf(subject)
+  local item = bound[subject]
+  if item == nil then return nil end
+  local okIcon, icon = pcall(item.GetIconTexture, item)
+  if okIcon and icon ~= nil then
+    local okID, id = pcall(icon.GetTextureFileID, icon)
+    if okID and not ns.IsSecret(id) and type(id) == "number" and id ~= 0 then return id end
+  end
+  local okTex, tex = pcall(item.GetSpellTexture, item)
+  if okTex and not ns.IsSecret(tex) and type(tex) == "number" and tex ~= 0 then return tex end
+  return nil
 end
 
 function Attach.ReportStatus()

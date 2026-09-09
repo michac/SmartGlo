@@ -17,4 +17,4 @@ Count.lua
 Config.lua
 
 # --- probes (delete on close) ---
-probes/Spin.lua
+probes/Occluder.lua
