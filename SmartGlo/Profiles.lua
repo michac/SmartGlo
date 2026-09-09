@@ -17,10 +17,11 @@ Profiles.list = {
         subject = 105174,
         show = { t = "resource", power = "soul_shards", cmp = ">=", value = 3 },
       },
+      -- No gate: at zero imps and below the threshold the correct output is the same
+      -- nothing, so there is no absence case for a readable term to cover.
       {
         name = "Implosion at six imps",
         subject = 196277,
-        show = { t = "aura", spell = 296553 },
         count = { aura = 296553, threshold = 6 },
       },
     },
