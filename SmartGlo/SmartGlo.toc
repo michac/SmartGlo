@@ -15,3 +15,6 @@ Overlay.lua
 Attach.lua
 Count.lua
 Config.lua
+
+# --- probes (delete on close) ---
+probes/Spin.lua
