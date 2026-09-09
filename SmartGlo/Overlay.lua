@@ -13,17 +13,20 @@ local LEVEL_ABOVE_ITEM = 5
 
 local frames = {}
 
+--- An overlay is never HIDDEN once built. A count element's motion is armed before its
+--- FontString is handed over, after which the group is forbidden to us — so a hide anywhere
+--- above it stops a spin nothing can start again. Visibility is alpha, all the way down.
 local function Build()
   local f = CreateFrame("Frame", nil, UIParent)
   f:SetFrameStrata("MEDIUM")
-  f:Hide()
+  f:SetAlpha(0)
 
   -- The white master, tinted here: our own texture reaches VertexColor, which the count
   -- sink's inline escape never can.
   local mark = f:CreateTexture(nil, "OVERLAY")
   mark:SetTexture(ns.Look.MASTER)
   mark:SetPoint("CENTER")
-  mark:Hide()
+  mark:SetAlpha(0)
   ns.Look.Spin(mark)
 
   f.mark = mark
@@ -64,16 +67,20 @@ function Overlay.Anchor(f, item)
     local size = width * ns.Look.FRACTION
     f.mark:SetSize(size, size)
   end
-  f:Show()
+  f:SetAlpha(1)
 end
 
 function Overlay.Detach(f)
   f:ClearAllPoints()
-  f:Hide()
+  f:SetAlpha(0)
+end
+
+function Overlay.SetVisible(f, visible)
+  if visible then f:SetAlpha(1) else f:SetAlpha(0) end
 end
 
 function Overlay.SetLit(f, lit, color)
   local rgb = ns.Look.Rgb(color)
   f.mark:SetVertexColor(rgb[1], rgb[2], rgb[3])
-  f.mark:SetShown(lit)
+  if lit then f.mark:SetAlpha(1) else f.mark:SetAlpha(0) end
 end

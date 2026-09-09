@@ -219,7 +219,7 @@ function Attach.Evaluate()
   end
   for subject in pairs(bound) do
     local f = ns.Overlay.For(subject)
-    f:SetShown(not editing)
+    ns.Overlay.SetVisible(f, not editing)
     ns.Overlay.SetLit(f, lit[subject] ~= nil, lit[subject])
   end
 end

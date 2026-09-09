@@ -15,8 +15,6 @@ local containers = {}
 local wanted = {}
 local state = {}
 local spins = {}
-local restarts = {}
-local ticker
 
 --- The colour is part of the key: a band's hue is baked into the file it names, so changing
 --- it means a new container rather than a re-armed sink.
@@ -93,12 +91,12 @@ local function Arm(host, glow, key)
       -- non-empty state, so its width never varies under the player.
       local fs = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
       fs:SetPoint("CENTER", button, "CENTER", 0, 0)
+      spin = ns.Look.Spin(fs)
       local okSink, sinkErr = pcall(button.SetApplicationCount, button, fs, { formatter = fmt })
       if not okSink then
         Note(key, "SetApplicationCount refused: " .. tostring(sinkErr))
         return
       end
-      spin = ns.Look.Spin(fs)
       armed = true
     end,
   })
@@ -124,8 +122,7 @@ local function Arm(host, glow, key)
   end
   Note(key, "armed on aura " .. glow.count.aura)
   spins[key] = spin
-  restarts[key] = 0
-  container:Hide()
+  container:SetAlpha(0)
   return container
 end
 
@@ -140,13 +137,14 @@ function Count.Rebuild()
     end
   end
 
+  -- Hide is correct HERE and nowhere else in this file: a container being discarded is
+  -- never coming back, so stopping its spin costs nothing.
   for key, container in pairs(containers) do
     if wanted[key] == nil then
       container:Hide()
       containers[key] = nil
       state[key] = nil
       spins[key] = nil
-      restarts[key] = nil
     end
   end
 
@@ -161,12 +159,12 @@ function Count.Rebuild()
   end
 end
 
---- The readable half of a count rule is an ordinary gate, and a gate over a binding is the
---- widget being hidden before the client ever draws it.
+--- A gate over a binding closes the widget before the client draws it -- through ALPHA, not
+--- Hide, because the mark's motion was armed before the handover and cannot be restarted.
 function Count.SetGate(glow, open)
   local container = containers[KeyOf(glow)]
   if container == nil then return end
-  container:SetShown(open)
+  if open then container:SetAlpha(1) else container:SetAlpha(0) end
 end
 
 function Count.Reanchor()
@@ -187,27 +185,8 @@ function Count.Describe(subject)
   return "no count element"
 end
 
---- An animation does not advance while its region is hidden, and this sink's FontString is
---- shown by the client rather than by us. Restarting only a STOPPED group leaves a running
---- one alone, and the restart count says how often the client is cycling it.
-local function Respin()
-  for key, group in pairs(spins) do
-    local container = containers[key]
-    if container ~= nil and container:IsShown() then
-      local ok, playing = pcall(group.IsPlaying, group)
-      if ok and playing == false then
-        group:Play()
-        restarts[key] = (restarts[key] or 0) + 1
-      end
-    end
-  end
-end
-
 function Count.Start()
   Count.Rebuild()
-  if ticker == nil then
-    ticker = C_Timer.NewTicker(0.5, Respin)
-  end
 end
 
 function Count.ReportStatus()
@@ -216,16 +195,19 @@ function Count.ReportStatus()
     any = true
     local spin = "no spin group"
     if spins[key] ~= nil then
+      -- The group is forbidden to us once the sink has taken its FontString, so this
+      -- reports what the read DID rather than a state it cannot obtain.
       local ok, playing = pcall(spins[key].IsPlaying, spins[key])
       if not ok then
-        spin = "IsPlaying refused: " .. tostring(playing)
+        spin = "spin armed; group is forbidden to read back"
       elseif ns.IsSecret(playing) then
-        spin = "IsPlaying is secret"
+        spin = "spin armed; IsPlaying is secret"
       else
-        spin = ("spin playing=%s, restarts=%d"):format(tostring(playing), restarts[key] or 0)
+        spin = "spin armed; playing=" .. tostring(playing)
       end
     end
-    ns.Printf("  count %s: %s |cff999999(%s)|r", key, state[key] or "no report", spin)
+    ns.Printf("  count %s: %s |cff999999(%s, combat=%s)|r", key, state[key] or "no report",
+      spin, tostring(InCombatLockdown()))
   end
   if not any then
     ns.Print("  no count elements.")
@@ -245,7 +227,6 @@ ns.RegisterCommand{
       containers[key] = nil
       state[key] = nil
       spins[key] = nil
-      restarts[key] = nil
     end
     Count.Rebuild()
     Count.ReportStatus()
