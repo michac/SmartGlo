@@ -15,9 +15,15 @@ Look.DEFAULT = "yellow"
 Look.FRACTION = 0.72
 Look.SPIN_SECONDS = 3
 
---- Wider than the mark, so the occluder covers it whole; well inside the icon, so the corners
---- the Cooldown Manager's mask rounds are never redrawn.
-Look.OCCLUDE = 0.82
+--- The window the occluder's crop is CHOSEN from, not the crop itself. The floor is above
+--- FRACTION so the occluder always covers the mark whole; the ceiling keeps it well inside the
+--- corners the Cooldown Manager's mask rounds.
+Look.OCCLUDE_MIN = 0.74
+Look.OCCLUDE_MAX = 0.88
+
+--- Sub-unit trim, in the FontString's own coordinate space. The escape's own offsets are
+--- integers (`%d`), so anything finer than a unit has to move the region instead of the art.
+Look.OCCLUDE_X = 0
 Look.OCCLUDE_Y = 0
 
 --- Spell icons are 64x64 files. The crop is expressed to `CreateTextureMarkup` as fractions
@@ -63,17 +69,49 @@ Look.MASTER = "Interface\\AddOns\\SmartGlo\\Media\\hex-white"
 ---
 --- Sizes are in the FONTSTRING'S coordinate space, never screen pixels, so `width` must come
 --- from `GetWidth()` on the frame the string is drawn in.
---- The crop is snapped to whole texels about the file's centre. `CreateTextureMarkup` emits
---- every field with `%d`, so a fraction that does not land on a texel boundary is truncated
---- rather than rounded -- which walks the crop half a texel off centre and, worse, leaves the
---- drawn size describing a crop that is not the one taken.
-function Look.IconEscape(fileID, width, fraction, yOffset)
-  local half = math.floor(ICON_FILE_SIZE * fraction / 2 + 0.5)
+--- Which crop to take, given the width it will be drawn at. Both ends quantise -- the crop to
+--- whole TEXELS of a 64px file, the draw to whole UNITS of the host frame, because
+--- `CreateTextureMarkup` emits every field with `%d` -- and the two grids rarely agree. A crop
+--- whose drawn size has to round is drawn over a region it does not match, which reads as the
+--- icon shifting when the occluder appears.
+---
+--- So the crop is SEARCHED rather than named: every whole-texel crop in the window, ranked by
+--- how far its drawn size has to round, smallest crop breaking a tie. The window's floor is
+--- what guarantees coverage of the mark; which crop inside it wins is arithmetic, and it
+--- differs per width -- 50-unit Essential, 30-unit Utility and 40-unit BuffIcon rows do not
+--- share an answer.
+--- One candidate: the crop `half` texels either side of the file's centre, and what it costs
+--- to draw at `width`.
+function Look.CropAt(width, half)
+  local want = width * (2 * half) / ICON_FILE_SIZE
+  local size = math.floor(want + 0.5)
+  return { half = half, size = size, residual = size - want }
+end
+
+function Look.ChooseCrop(width)
+  local best
+  local lo = math.ceil(ICON_FILE_SIZE * Look.OCCLUDE_MIN / 2)
+  local hi = math.floor(ICON_FILE_SIZE * Look.OCCLUDE_MAX / 2)
+  for half = lo, hi do
+    local candidate = Look.CropAt(width, half)
+    if best == nil or math.abs(candidate.residual) < math.abs(best.residual) - 1e-9 then
+      best = candidate
+    end
+  end
+  return best
+end
+
+--- The crop is snapped to whole texels about the file's centre, so the crop's own centre is
+--- exactly the file's and only the DRAW size can round.
+--- `half` overrides the search with an explicit half-crop in texels; the probe passes one to
+--- lay the search's pick beside its neighbours. Product code omits it.
+function Look.IconEscape(fileID, width, half)
+  local crop = half and Look.CropAt(width, half) or Look.ChooseCrop(width)
   local centre = ICON_FILE_SIZE / 2
-  local lo, hi = (centre - half) / ICON_FILE_SIZE, (centre + half) / ICON_FILE_SIZE
-  local size = math.floor(width * (hi - lo) + 0.5)
-  return CreateTextureMarkup(fileID, ICON_FILE_SIZE, ICON_FILE_SIZE, size, size,
-    lo, hi, lo, hi, 0, yOffset or 0)
+  local lo = (centre - crop.half) / ICON_FILE_SIZE
+  local hi = (centre + crop.half) / ICON_FILE_SIZE
+  return CreateTextureMarkup(fileID, ICON_FILE_SIZE, ICON_FILE_SIZE, crop.size, crop.size,
+    lo, hi, lo, hi, 0, 0), crop
 end
 
 --- One looping turn, armed at build and never started on a threshold. A count's crossing is

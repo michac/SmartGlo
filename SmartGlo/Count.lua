@@ -41,8 +41,7 @@ end
 --- though the threshold were met. It is only correct for an aura that is CONTINUOUSLY
 --- PRESENT. Do not point a count element at one that drops.
 local function Bands(threshold, entry)
-  local escape = ns.Look.IconEscape(entry.icon, entry.width, ns.Look.OCCLUDE,
-    ns.Look.OCCLUDE_Y)
+  local escape = ns.Look.IconEscape(entry.icon, entry.width)
   return {
     { threshold = 0, format = escape },
     { threshold = threshold, format = "" },
@@ -101,7 +100,9 @@ local function Arm(entry, key)
       -- Centred is safe here where it would not be for a numeral: the string has one
       -- non-empty state, so its width never varies under the player.
       local fs = button:CreateFontString(nil, "OVERLAY", "NumberFontNormal")
-      fs:SetPoint("CENTER", button, "CENTER", 0, 0)
+      -- Sub-unit trim lives HERE rather than in the escape: the escape's offsets are integers
+      -- and the residual this corrects is a fraction of a unit.
+      fs:SetPoint("CENTER", button, "CENTER", ns.Look.OCCLUDE_X, ns.Look.OCCLUDE_Y)
       local okSink, sinkErr = pcall(button.SetApplicationCount, button, fs, { formatter = fmt })
       if not okSink then
         Note(key, "SetApplicationCount refused: " .. tostring(sinkErr))
@@ -130,8 +131,9 @@ local function Arm(entry, key)
     Note(key, "the slot built but the count sink never armed.")
     return nil
   end
-  Note(key, ("armed on aura %d -- icon %d cropped to %d"):format(glow.count.aura,
-    entry.icon, entry.size))
+  Note(key, ("armed on aura %d -- icon %d, %d/%d texels drawn at %d units (residual %+.4f), "
+    .. "trim %+.2f,%+.2f"):format(glow.count.aura, entry.icon, entry.crop.half * 2,
+    64, entry.crop.size, entry.crop.residual, ns.Look.OCCLUDE_X, ns.Look.OCCLUDE_Y))
   container:SetAlpha(0)
   return container
 end
@@ -151,9 +153,9 @@ function Count.Rebuild()
         pending[glow.subject] = "waiting for a laid-out row -- an occluder is cropped from "
           .. "the icon that row is drawing."
       else
-        local size = math.floor(width * ns.Look.OCCLUDE + 0.5)
-        local key = KeyOf(glow, icon, size)
-        wanted[key] = { glow = glow, icon = icon, width = width, size = size }
+        local crop = ns.Look.ChooseCrop(width)
+        local key = KeyOf(glow, icon, crop.size)
+        wanted[key] = { glow = glow, icon = icon, width = width, crop = crop }
         keyFor[glow] = key
       end
     end
@@ -222,17 +224,23 @@ function Count.ReportStatus()
   end
 end
 
+--- Discards every container and builds again. A formatter is fixed at handover and a button
+--- may not be re-armed, so anything that changes what a band DRAWS goes through here.
+function Count.Rearm()
+  for key, container in pairs(containers) do
+    container:Hide()
+    containers[key] = nil
+    state[key] = nil
+  end
+  failed = {}
+  Count.Rebuild()
+end
+
 ns.RegisterCommand{
   name = "rearm",
   desc = "discard every count element and build it again",
   handler = function()
-    for key, container in pairs(containers) do
-      container:Hide()
-      containers[key] = nil
-      state[key] = nil
-    end
-    failed = {}
-    Count.Rebuild()
+    Count.Rearm()
     Count.ReportStatus()
   end,
 }
