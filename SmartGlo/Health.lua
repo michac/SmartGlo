@@ -16,16 +16,12 @@ ns.Health = Health
 
 local INTERVAL = 0.1
 
---- The input scale is UNMEASURED. The documentation says "percent of health remaining", and
---- no Blizzard caller passes a curve to this function, so whether full health arrives as 100
---- or as 1 is a guess until an eyeball settles it.
----
---- The curves below are shaped so that the WRONG guess fails DARK. A `<` rule wants alpha at
---- LOW input, which on a 0..1 scale would be every input there is -- permanently bright, the
---- one failure worse than none. The guard point at 1.001 takes that whole range back to 0, so
---- on a 0..1 client the mark simply never lights. It costs the 0..1% band on a 0..100 client,
---- which is a health total nobody survives to look at.
-local ZERO_TO_ONE = 1.001
+--- The curve's input is a FRACTION: full health arrives as 1.0, not as 100. Blizzard ships
+--- `CurveConstants.ScaleTo100` to convert it, a Linear curve from (0.0, 0) to (1.0, 100),
+--- and its own comment calls that "re-scales any percentage value from [0, 1] to [0, 100]"
+--- (`security-taint-and-restricted-data.md` §4.12). A rule states its threshold in percent,
+--- so the compile divides by this.
+local PERCENT = 100
 
 local active = {}
 local ticker
@@ -51,14 +47,13 @@ end
 local function Compile(bind)
   local curve = C_CurveUtil.CreateCurve()
   curve:SetType(Enum.LuaCurveType.Step)
+  local at = bind.percent / PERCENT
   if bind.cmp == ">" or bind.cmp == ">=" then
-    -- Alpha at HIGH input, so a 0..1 scale lands below the threshold and reads dark already.
     curve:AddPoint(0, 0)
-    curve:AddPoint(bind.percent, 1)
+    curve:AddPoint(at, 1)
   else
-    curve:AddPoint(0, 0)
-    curve:AddPoint(ZERO_TO_ONE, 1)
-    curve:AddPoint(bind.percent, 0)
+    curve:AddPoint(0, 1)
+    curve:AddPoint(at, 0)
   end
   return curve
 end
@@ -147,8 +142,9 @@ end
 --- What `/sg why` can honestly say about a sealed bind: the points it compiled to. There is
 --- no readback of what the client drew, so the compiled curve is the whole story.
 function Health.Describe(bind)
+  local at = bind.percent / PERCENT
   if bind.cmp == ">" or bind.cmp == ">=" then
-    return ("[sealed] Step (0,0) (%s,1)"):format(bind.percent)
+    return ("[sealed] Step (0,0) (%s,1)"):format(at)
   end
-  return ("[sealed] Step (0,0) (%s,1) (%s,0)"):format(ZERO_TO_ONE, bind.percent)
+  return ("[sealed] Step (0,1) (%s,0)"):format(at)
 end

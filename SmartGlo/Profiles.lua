@@ -259,47 +259,43 @@ Profiles.list = {
   },
 
   -- ⚠ AN INSTRUMENT, NOT ADVICE. Four health binds and nothing else, so every mark on screen
-  -- is one of these four and no advice rung can be mistaken for one.
+  -- is one of these four.
   --
-  -- A LADDER, because one binary mark cannot report a number. Four thresholds on four icons
-  -- read at once, and the COUNT of lit marks is the answer. `UnitHealthPercent` evaluates the
-  -- curve against a "percentage" the docs never define, so at full health the input is either
-  -- 100 or 1.0, and thresholds straddling both tell them apart standing still:
+  -- A LADDER: three rising thresholds and the complement of the lowest, read at once. The
+  -- COUNT of lit marks is your health band, so the curve is exercised at three points rather
+  -- than one, and out of combat your own regeneration sweeps it for you -- nothing here needs
+  -- damage taken on purpose, a threshold crossed on cue, or a stopwatch.
   --
-  --   3 lit, control dark   input is 0..100            2 and 50 are below 100, not below 1
-  --   1 lit (0.5 only)      input is 0..1              1.0 clears 0.5 and nothing above it
-  --   0 lit                 nothing drives alpha       no curve reached a mark
-  --   4 lit, control lit    something else drives it   the whole reading is suspect
+  --   Word of Glory lit               >= 80%        all three lit  = 80%+
+  --   Shield of the Righteous lit     >= 60%        two lit        = 60-80%
+  --   Consecration lit                >= 40%        one lit        = 40-60%
+  --   Avenger's Shield lit            <  40%        only AS lit    = under 40%
   --
-  -- The `< 50` control must stay dark under BOTH scales: 100 floors onto its zero band, and
-  -- 1.0 floors below the guard point onto the same zero. A lit control means a mark is on for
-  -- a reason that has nothing to do with a curve, which would make the other three unreadable.
-  --
-  -- No rung carries a `when`: a gate made the earlier version of this readable only while
-  -- holding 3 Holy Power, which is never when you are free to look at it. Nothing here needs
-  -- combat, damage, a threshold crossing or a reload to be read.
+  -- Consecration and Avenger's Shield are exact complements, so EXACTLY ONE of them is lit at
+  -- every health total. Both lit or both dark means the reading is void -- a standing validity
+  -- check that costs nothing and exercises the `<` compile path beside the `>=` one.
   ["protection-healthprobe"] = {
-    label = "Protection — health-bind probe",
+    label = "Protection — health-bind ladder",
     glows = {
       {
-        name = "PROBE rung 1: >= 0.5 (lit on either scale)",
+        name = "LADDER: >= 80% health",
         subject = 85673,
-        bind = { cmp = ">=", family = "health", percent = 0.5 },
+        bind = { cmp = ">=", family = "health", percent = 80 },
       },
       {
-        name = "PROBE rung 2: >= 2 (lit only on 0..100)",
+        name = "LADDER: >= 60% health",
         subject = 53600,
-        bind = { cmp = ">=", family = "health", percent = 2 },
+        bind = { cmp = ">=", family = "health", percent = 60 },
       },
       {
-        name = "PROBE rung 3: >= 50 (lit only on 0..100)",
+        name = "LADDER: >= 40% health",
         subject = 26573,
-        bind = { cmp = ">=", family = "health", percent = 50 },
+        bind = { cmp = ">=", family = "health", percent = 40 },
       },
       {
-        name = "PROBE control: < 50 (dark on either scale)",
+        name = "LADDER: < 40% health (complement of the rung above)",
         subject = 31935,
-        bind = { cmp = "<", family = "health", percent = 50 },
+        bind = { cmp = "<", family = "health", percent = 40 },
       },
     },
   },
