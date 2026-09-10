@@ -55,11 +55,6 @@ Profiles.list = {
         subject = 105174,
         when = { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
       },
-      -- Dominion of Argus's window IS the Tyrant window -- "Summoning your Demonic Tyrant
-      -- leaves open a portal to Argus for 15 sec" -- so this aura is the addon's only way to
-      -- ask "is Tyrant out". The id is the row the Cooldown Manager tracks, not the talent
-      -- 1276163: the talent id names no tracked row, so a latch on it would read UNKNOWN
-      -- forever. It needs a Tracked Buffs checkbox, and `/sg why` says so when it is missing.
       {
         name = "Hand of Gul'dan inside the Argus window",
         subject = 105174,
@@ -69,13 +64,13 @@ Profiles.list = {
         name = "Demonbolt on a Core below four shards",
         subject = 264178,
         when = { t = "and", terms = {
-          { t = "resource", power = "soul_shards", cmp = "<", value = 4, projected = true },
-          { t = "aura", spell = 264173 },
-        } },
+            { t = "resource", power = "soul_shards", cmp = "<", value = 4, projected = true },
+            { t = "aura", spell = 264173 },
+          } },
       },
       {
         name = "Infernal Bolt below three shards",
-        subject = 433891,
+        subject = 434506,
         when = { t = "resource", power = "soul_shards", cmp = "<", value = 3, projected = true },
       },
       {
@@ -104,18 +99,17 @@ Profiles.list = {
         subject = 1276672,
         when = { t = "ready", spell = 1276672 },
       },
-      -- Reign of Tyranny banks imps for the Tyrant instead, so the APL only sends
-      -- Dreadstalkers on demand when it is NOT taken.
       {
         name = "Call Dreadstalkers without Reign of Tyranny",
         subject = 104316,
         when = { t = "and", terms = {
-          { t = "not", term = { t = "talent", spell = 1276748 } },
-          { t = "ready", spell = 104316 },
-        } },
+            { t = "not", term = { t = "talent", spell = 1276748 } },
+            { t = "ready", spell = 104316 },
+          } },
       },
     },
   },
+
   -- Transcribed from the simc `retribution` list. Each glow is one APL line with the terms
   -- the addon cannot read dropped -- so a lit icon means "this line's readable conditions
   -- hold", never "cast this now": priority ORDER is not expressible and is not claimed.
@@ -207,9 +201,14 @@ Profiles.list = {
         bind = { family = "health", cmp = "<", percent = 80 },
       },
       {
-        name = "Holy Armaments capped",
+        name = "Holy Bulwark next and capped",
         subject = 432459,
         when = { t = "at_max_charges", spell = 432459 },
+      },
+      {
+        name = "Sacred Weapon next and its buff is down",
+        subject = 432472,
+        when = { t = "not", term = { t = "aura", spell = 432502 } },
       },
       {
         name = "Avenger's Shield on Glory of the Vanguard",
@@ -329,14 +328,17 @@ Profiles.list = {
             { t = "and", terms = {
                 { t = "and", terms = {
                     { t = "and", terms = {
-                        { t = "ready", spell = 31850 },
-                        { t = "not", term = { t = "aura", spell = 31850 } },
+                        { t = "and", terms = {
+                            { t = "ready", spell = 31850 },
+                            { t = "not", term = { t = "aura", spell = 31850 } },
+                          } },
+                        { t = "not", term = { t = "aura", spell = 86659 } },
                       } },
-                    { t = "not", term = { t = "aura", spell = 86659 } },
+                    { t = "not", term = { t = "aura", spell = 642 } },
                   } },
-                { t = "not", term = { t = "aura", spell = 642 } },
+                { t = "not", term = { t = "active", spell = 389539 } },
               } },
-            { t = "not", term = { t = "active", spell = 389539 } },
+            { t = "not", term = { t = "aura", spell = 432607 } },
           } },
         bind = { family = "health", cmp = "<", percent = 70 },
       },
@@ -347,14 +349,17 @@ Profiles.list = {
             { t = "and", terms = {
                 { t = "and", terms = {
                     { t = "and", terms = {
-                        { t = "ready", spell = 86659 },
-                        { t = "not", term = { t = "aura", spell = 31850 } },
+                        { t = "and", terms = {
+                            { t = "ready", spell = 86659 },
+                            { t = "not", term = { t = "aura", spell = 31850 } },
+                          } },
+                        { t = "not", term = { t = "aura", spell = 86659 } },
                       } },
-                    { t = "not", term = { t = "aura", spell = 86659 } },
+                    { t = "not", term = { t = "aura", spell = 642 } },
                   } },
-                { t = "not", term = { t = "aura", spell = 642 } },
+                { t = "not", term = { t = "active", spell = 389539 } },
               } },
-            { t = "not", term = { t = "active", spell = 389539 } },
+            { t = "not", term = { t = "aura", spell = 432607 } },
           } },
         bind = { family = "health", cmp = "<", percent = 70 },
       },
@@ -365,14 +370,17 @@ Profiles.list = {
             { t = "and", terms = {
                 { t = "and", terms = {
                     { t = "and", terms = {
-                        { t = "ready", spell = 642 },
-                        { t = "not", term = { t = "aura", spell = 31850 } },
+                        { t = "and", terms = {
+                            { t = "ready", spell = 642 },
+                            { t = "not", term = { t = "aura", spell = 31850 } },
+                          } },
+                        { t = "not", term = { t = "aura", spell = 86659 } },
                       } },
-                    { t = "not", term = { t = "aura", spell = 86659 } },
+                    { t = "not", term = { t = "aura", spell = 642 } },
                   } },
-                { t = "not", term = { t = "aura", spell = 642 } },
+                { t = "not", term = { t = "active", spell = 389539 } },
               } },
-            { t = "not", term = { t = "active", spell = 389539 } },
+            { t = "not", term = { t = "aura", spell = 432607 } },
           } },
         bind = { family = "health", cmp = "<", percent = 70 },
       },
@@ -383,14 +391,17 @@ Profiles.list = {
             { t = "and", terms = {
                 { t = "and", terms = {
                     { t = "and", terms = {
-                        { t = "ready", spell = 204018 },
-                        { t = "not", term = { t = "aura", spell = 31850 } },
+                        { t = "and", terms = {
+                            { t = "ready", spell = 204018 },
+                            { t = "not", term = { t = "aura", spell = 31850 } },
+                          } },
+                        { t = "not", term = { t = "aura", spell = 86659 } },
                       } },
-                    { t = "not", term = { t = "aura", spell = 86659 } },
+                    { t = "not", term = { t = "aura", spell = 642 } },
                   } },
-                { t = "not", term = { t = "aura", spell = 642 } },
+                { t = "not", term = { t = "active", spell = 389539 } },
               } },
-            { t = "not", term = { t = "active", spell = 389539 } },
+            { t = "not", term = { t = "aura", spell = 432607 } },
           } },
         bind = { family = "health", cmp = "<", percent = 70 },
       },
@@ -401,14 +412,17 @@ Profiles.list = {
             { t = "and", terms = {
                 { t = "and", terms = {
                     { t = "and", terms = {
-                        { t = "ready", spell = 633 },
-                        { t = "not", term = { t = "aura", spell = 31850 } },
+                        { t = "and", terms = {
+                            { t = "ready", spell = 633 },
+                            { t = "not", term = { t = "aura", spell = 31850 } },
+                          } },
+                        { t = "not", term = { t = "aura", spell = 86659 } },
                       } },
-                    { t = "not", term = { t = "aura", spell = 86659 } },
+                    { t = "not", term = { t = "aura", spell = 642 } },
                   } },
-                { t = "not", term = { t = "aura", spell = 642 } },
+                { t = "not", term = { t = "active", spell = 389539 } },
               } },
-            { t = "not", term = { t = "active", spell = 389539 } },
+            { t = "not", term = { t = "aura", spell = 432607 } },
           } },
         bind = { family = "health", cmp = "<", percent = 50 },
       },
