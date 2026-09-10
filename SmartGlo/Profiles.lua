@@ -299,6 +299,52 @@ Profiles.list = {
       },
     },
   },
+
+  -- ⚠ AN INSTRUMENT, NOT ADVICE. Four duration binds, all reading ARDENT DEFENDER's cooldown
+  -- (31850, ~90s, self-cast, no target, castable out of combat) and glowing four other icons.
+  -- Subject and bound spell are independent, so one press lights a ladder somewhere else.
+  --
+  -- The question is the curve's INPUT UNIT, which `Duration.lua` assumes is seconds and which
+  -- nothing has measured. Right after casting, remaining is ~90 seconds -- so the input is ~90
+  -- on a seconds domain, ~90000 on milliseconds, ~1.0 on a [0, 1] fraction. Points at 30 and
+  -- 1000 straddle all three.
+  --
+  --   Consecration vs Avenger's Shield are exact complements -- which one is lit is the answer:
+  --     Avenger's Shield lit   input is seconds or a fraction
+  --     Consecration lit       input is MILLISECONDS
+  --   Shield of the Righteous then separates the first pair:
+  --     lit                    input is SECONDS -- the shipped assumption holds
+  --     dark                   input is a [0, 1] FRACTION
+  --   Word of Glory dark with a cooldown running means nothing drives alpha at all.
+  --
+  -- `< 1000s` carries `absent dark` because `<` on a cooldown is also true at zero remaining,
+  -- which would glow permanently while the spell is up.
+  ["protection-durationprobe"] = {
+    label = "Protection — duration-bind probe",
+    glows = {
+      {
+        name = "DPROBE: Ardent Defender cooldown > 0.5s (anything at all)",
+        subject = 85673,
+        bind = { family = "duration", spell = 31850, cmp = ">", seconds = 0.5 },
+      },
+      {
+        name = "DPROBE: > 30s (lit on seconds or ms, dark on a fraction)",
+        subject = 53600,
+        bind = { family = "duration", spell = 31850, cmp = ">", seconds = 30 },
+      },
+      {
+        name = "DPROBE: > 1000s (lit ONLY on milliseconds)",
+        subject = 26573,
+        bind = { family = "duration", spell = 31850, cmp = ">", seconds = 1000 },
+      },
+      {
+        name = "DPROBE: < 1000s (complement of the rung above)",
+        subject = 31935,
+        bind = { family = "duration", spell = 31850, cmp = "<", seconds = 1000,
+                 absent = "dark" },
+      },
+    },
+  },
 }
 
 function Profiles.Names()
