@@ -23,12 +23,15 @@ stds.wow = {
 
     -- Rules.lua — the readable vocabulary: secondary resources, the cooldown info table,
     -- and the trait config, which is how `talent()` asks whether a node is purchased.
+    -- `C_SpellBook` is how `ready()` screens out a spell the player does not have, which
+    -- reports "nothing running" exactly like one off cooldown.
     "UnitPower",
     "UnitPowerDisplayMod",
     "UnitHealthPercent",
     "Enum",
     "C_Traits",
     "C_ClassTalents",
+    "C_SpellBook",
     "InCombatLockdown",
 
     -- Look.lua — the shipped escape builder, so no format string is hand-rolled here.
