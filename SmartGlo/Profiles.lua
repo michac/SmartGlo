@@ -258,32 +258,48 @@ Profiles.list = {
     },
   },
 
-  -- ⚠ AN INSTRUMENT, NOT ADVICE. Two complementary health binds and nothing else, so any
-  -- mark on screen is one of these two and no other rung can be mistaken for one.
+  -- ⚠ AN INSTRUMENT, NOT ADVICE. Four health binds and nothing else, so every mark on screen
+  -- is one of these four and no advice rung can be mistaken for one.
   --
-  -- They sit on DIFFERENT subjects on purpose. Every mark is the same hexagon at the same
-  -- place, so a complementary pair sharing one icon draws "both lit" and "one lit" as the
-  -- same picture and cannot report its own result. Two icons is what makes it readable.
+  -- A LADDER, because one binary mark cannot report a number. Four thresholds on four icons
+  -- read at once, and the COUNT of lit marks is the answer. `UnitHealthPercent` evaluates the
+  -- curve against a "percentage" the docs never define, so at full health the input is either
+  -- 100 or 1.0, and thresholds straddling both tell them apart standing still:
   --
-  -- Neither carries a `when`: a gate is what made the earlier version of this readable only
-  -- while holding 3 Holy Power, which is never when you are free to look at it.
+  --   3 lit, control dark   input is 0..100            2 and 50 are below 100, not below 1
+  --   1 lit (0.5 only)      input is 0..1              1.0 clears 0.5 and nothing above it
+  --   0 lit                 nothing drives alpha       no curve reached a mark
+  --   4 lit, control lit    something else drives it   the whole reading is suspect
   --
-  -- At FULL health, with the arm lines in the `attach` capture:
-  --   Shield of the Righteous lit, Word of Glory dark   curve drives alpha, input is 0..100
-  --   both dark, log shows arms + <secret>              curve drives alpha, input is 0..1
-  --   both dark, log shows UNAVAILABLE or no arm        nothing drives alpha on this client
+  -- The `< 50` control must stay dark under BOTH scales: 100 floors onto its zero band, and
+  -- 1.0 floors below the guard point onto the same zero. A lit control means a mark is on for
+  -- a reason that has nothing to do with a curve, which would make the other three unreadable.
+  --
+  -- No rung carries a `when`: a gate made the earlier version of this readable only while
+  -- holding 3 Holy Power, which is never when you are free to look at it. Nothing here needs
+  -- combat, damage, a threshold crossing or a reload to be read.
   ["protection-healthprobe"] = {
     label = "Protection — health-bind probe",
     glows = {
       {
-        name = "PROBE: below 80% health",
+        name = "PROBE rung 1: >= 0.5 (lit on either scale)",
         subject = 85673,
-        bind = { cmp = "<", family = "health", percent = 80 },
+        bind = { cmp = ">=", family = "health", percent = 0.5 },
       },
       {
-        name = "PROBE: at or above 80% health",
+        name = "PROBE rung 2: >= 2 (lit only on 0..100)",
         subject = 53600,
-        bind = { cmp = ">=", family = "health", percent = 80 },
+        bind = { cmp = ">=", family = "health", percent = 2 },
+      },
+      {
+        name = "PROBE rung 3: >= 50 (lit only on 0..100)",
+        subject = 26573,
+        bind = { cmp = ">=", family = "health", percent = 50 },
+      },
+      {
+        name = "PROBE control: < 50 (dark on either scale)",
+        subject = 31935,
+        bind = { cmp = "<", family = "health", percent = 50 },
       },
     },
   },
