@@ -33,6 +33,10 @@ local function IndexFor(key, kind)
   for _, id in ipairs(ids) do
     local name = ns.Symbols[where.names][id]
     if name ~= nil then built[name] = id end
+    -- An id the sources name twice — a talent and the ability it grants, or the inventory and
+    -- the CDM disagreeing on wording — resolves under either name.
+    local also = kind ~= "aura" and ns.Symbols.alsoNamed[id] or nil
+    if also ~= nil and built[also] == nil then built[also] = id end
   end
   cache[key] = built
   return built
