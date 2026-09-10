@@ -67,7 +67,18 @@ local PALETTE = {
 --- would fight the sealed bind for the one channel it owns, and a per-mark OnUpdate needs a
 --- frame a texture does not have. So one shared ticker writes every cycling mark instead --
 --- it draws and never evaluates, like the sealed families' own.
-Look.CYCLE_SECONDS = 1.6
+--- The period is bounded by the DECISION window, not by taste: a glance lasts about a GCD,
+--- and at 1.6s the cycle completed 0.9 times in one -- so a look that landed in the yellow
+--- phase saw nothing at all on a yellow icon, which is the exact failure the cycle exists to
+--- prevent. 0.6s puts two and a half cycles in a 1.5s GCD, so no glance can miss a hue.
+--- 1.67 Hz, well under the 3 Hz where flashing starts to be a problem.
+Look.CYCLE_SECONDS = 0.6
+
+--- ...and the mark HOLDS each hue rather than sweeping between them. A linear crossing spends
+--- most of its time near the midpoint of purple and yellow, which is a pale tan -- neither
+--- colour, and the least visible of the three on both backgrounds. Holding the ends and
+--- crossing fast means the mark is a saturated hue 70% of the time and in the mud for 30%.
+Look.CYCLE_CROSS = 0.15
 local CYCLES = {
   alarm = { "purple", "yellow" },
 }
@@ -79,10 +90,19 @@ local function Lerp(a, b, t)
   return a + (b - a) * t
 end
 
+--- phase 0..1 -> blend 0..1, holding each end and crossing quickly between them.
+local function Wave(phase)
+  local cross = Look.CYCLE_CROSS
+  local hold = (1 - 2 * cross) / 2
+  if phase < hold then return 0 end
+  if phase < hold + cross then return (phase - hold) / cross end
+  if phase < 2 * hold + cross then return 1 end
+  return 1 - (phase - 2 * hold - cross) / cross
+end
+
 local function Tick()
-  -- A triangle wave, so the crossing is even in both directions and neither end holds.
   local phase = (GetTime() % Look.CYCLE_SECONDS) / Look.CYCLE_SECONDS
-  local t = phase < 0.5 and phase * 2 or (1 - phase) * 2
+  local t = Wave(phase)
   for mark, pair in pairs(cycling) do
     local from, to = PALETTE[pair[1]], PALETTE[pair[2]]
     mark:SetVertexColor(Lerp(from[1], to[1], t), Lerp(from[2], to[2], t),
