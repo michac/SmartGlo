@@ -26,6 +26,13 @@ local PRIMARY = {
   fury = true, pain = true, insanity = true, maelstrom = true,
 }
 
+--- Which resources may carry `.after_cast`. Not every secondary can: the Tier-1 energize
+--- rows show Wake of Ashes returning 1, 3 or 5 Holy Power and Ambush 1, 2 or 3 Combo Points
+--- depending on talents and procs, so there is no single number to project with. Soul Shards
+--- are whole and invariant for every hard cast that generates them, which is what makes the
+--- projection honest here and a guess everywhere else.
+local PROJECTABLE = { soul_shards = true }
+
 local CMP = {
   [">="] = function(a, b) return a >= b end,
   [">"] = function(a, b) return a > b end,
@@ -106,6 +113,11 @@ function Check(term, errs, depth)
     end
     if type(term.value) ~= "number" then
       table.insert(errs, "a resource threshold needs a number")
+    end
+    if term.projected and not PROJECTABLE[term.power] then
+      table.insert(errs, ("%s cannot be read past the current cast -- what a cast returns "
+        .. "depends on talents and procs for every resource but soul_shards, so there is no "
+        .. "one number to project with"):format(term.power))
     end
   elseif term.t == "ready" or term.t == "aura" or term.t == "talent" then
     if type(term.spell) ~= "number" then
@@ -230,27 +242,54 @@ end
 
 local Eval
 
+--- The number the threshold is compared against, in DISPLAY units, or `nil, why`.
+---
+--- Plain: whatever the bar shows. Projected: the same count with the in-flight cast's cost
+--- and gain applied, which has to be done in RAW units -- ten raw per Soul Shard -- and then
+--- floored the way the bar floors it, or the fragments left over from a partial shard would
+--- read as a whole one. `UnitPowerDisplayMod` supplies the scale so nothing here ships it.
+local function Current(term, pt)
+  if not term.projected then
+    local ok, value = pcall(UnitPower, "player", pt)
+    if not ok then return nil, "refused (" .. tostring(value) .. ")" end
+    if ns.IsSecret(value) or type(value) ~= "number" then return nil, "not a readable number" end
+    return value
+  end
+
+  local delta, why = ns.Cast.Delta(pt)
+  if delta == nil then return nil, why end
+
+  local ok, raw = pcall(UnitPower, "player", pt, true)
+  if not ok then return nil, "refused (" .. tostring(raw) .. ")" end
+  if ns.IsSecret(raw) or type(raw) ~= "number" then return nil, "not a readable number" end
+
+  local okMod, mod = pcall(UnitPowerDisplayMod, pt)
+  if not okMod or ns.IsSecret(mod) or type(mod) ~= "number" or mod <= 0 then
+    return nil, "no display scale"
+  end
+  return math.floor((raw + delta) / mod)
+end
+
 local function EvalResource(term, trace)
+  local label = term.power .. (term.projected and ".after_cast" or "")
   local pt = Rules.PowerType(term.power)
   if pt == nil then
-    trace[#trace + 1] = { text = term.power .. ": unknown resource", verdict = ns.UNKNOWN }
+    trace[#trace + 1] = { text = label .. ": unknown resource", verdict = ns.UNKNOWN }
     return ns.UNKNOWN
   end
-  local ok, value = pcall(UnitPower, "player", pt)
-  if not ok then
-    trace[#trace + 1] = { text = term.power .. ": refused (" .. tostring(value) .. ")", verdict = ns.UNKNOWN }
-    return ns.UNKNOWN
-  end
-  if ns.IsSecret(value) or type(value) ~= "number" then
-    trace[#trace + 1] = { text = term.power .. ": not a readable number", verdict = ns.UNKNOWN }
+  local value, why = Current(term, pt)
+  if value == nil then
+    trace[#trace + 1] = { text = label .. ": " .. tostring(why), verdict = ns.UNKNOWN }
     return ns.UNKNOWN
   end
   local verdict = ns.F
   if CMP[term.cmp](value, term.value) then verdict = ns.T end
-  trace[#trace + 1] = {
-    text = ("%s %s %d (is %d)"):format(term.power, term.cmp, term.value, value),
-    verdict = verdict,
-  }
+  local text = ("%s %s %d (is %d)"):format(label, term.cmp, term.value, value)
+  if term.projected then
+    local inflight = ns.Cast.InFlight()
+    text = text .. (inflight and (" past " .. Rules.Label(inflight)) or ", nothing casting")
+  end
+  trace[#trace + 1] = { text = text, verdict = verdict }
   return verdict
 end
 
@@ -499,6 +538,11 @@ function Rules.Triggers(expr, into)
     Rules.Triggers(expr.term, into)
   else
     for _, event in ipairs(TRIGGERS[expr.t] or {}) do into[event] = true end
+    -- A projected threshold also moves when a cast opens or ends, and no power event
+    -- announces that: the bar has not changed yet, which is the whole point.
+    if expr.t == "resource" and expr.projected then
+      for _, event in ipairs(ns.Cast.EVENTS) do into[event] = true end
+    end
   end
   return into
 end
@@ -512,7 +556,8 @@ local function Describe(expr)
   elseif expr.t == "not" then
     return "not " .. Describe(expr.term)
   elseif expr.t == "resource" then
-    return ("%s %s %s"):format(expr.power, expr.cmp, tostring(expr.value))
+    return ("%s%s %s %s"):format(expr.power, expr.projected and ".after_cast" or "",
+      expr.cmp, tostring(expr.value))
   elseif expr.t == "ready" or expr.t == "aura" or expr.t == "talent" then
     return expr.t .. "(" .. Rules.Label(expr.spell) .. ")"
   end

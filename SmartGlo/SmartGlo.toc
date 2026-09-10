@@ -9,6 +9,8 @@ Capture.lua
 Core.lua
 Symbols.lua
 Names.lua
+PowerGain.lua
+Cast.lua
 Look.lua
 Rules.lua
 Parse.lua

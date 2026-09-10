@@ -9,13 +9,18 @@ local Profiles = {}
 ns.Profiles = Profiles
 
 Profiles.list = {
+  -- ⚠ Every shard threshold in both Demonology profiles is `projected`: the count as it will
+  -- stand once the cast in flight lands. Shards are debited at COMPLETION, so mid-cast the bar
+  -- still shows the pre-cast number and a plain threshold answers about a state that is
+  -- already gone. Nothing casting projects ZERO, so these read exactly like plain thresholds
+  -- while you stand still.
   demonology = {
     label = "Demonology",
     glows = {
       {
         name = "Hand of Gul'dan at three shards",
         subject = 105174,
-        when = { t = "resource", power = "soul_shards", cmp = ">=", value = 3 },
+        when = { t = "resource", power = "soul_shards", cmp = ">=", value = 3, projected = true },
       },
       -- `ready()` covers a hazard of its own: the occluder is a static copy of the icon drawn
       -- above the swipe, so a mark mid-cooldown would show an unswiped patch. The absence case
@@ -43,12 +48,12 @@ Profiles.list = {
       {
         name = "Tyrant at five shards",
         subject = 265187,
-        when = { t = "resource", power = "soul_shards", cmp = "==", value = 5 },
+        when = { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
       },
       {
         name = "Hand of Gul'dan capped",
         subject = 105174,
-        when = { t = "resource", power = "soul_shards", cmp = "==", value = 5 },
+        when = { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
       },
       -- Dominion of Argus's window IS the Tyrant window -- "Summoning your Demonic Tyrant
       -- leaves open a portal to Argus for 15 sec" -- so this aura is the addon's only way to
@@ -64,14 +69,14 @@ Profiles.list = {
         name = "Demonbolt on a Core below four shards",
         subject = 264178,
         when = { t = "and", terms = {
-          { t = "resource", power = "soul_shards", cmp = "<", value = 4 },
+          { t = "resource", power = "soul_shards", cmp = "<", value = 4, projected = true },
           { t = "aura", spell = 264173 },
         } },
       },
       {
         name = "Infernal Bolt below three shards",
         subject = 433891,
-        when = { t = "resource", power = "soul_shards", cmp = "<", value = 3 },
+        when = { t = "resource", power = "soul_shards", cmp = "<", value = 3, projected = true },
       },
       {
         name = "Implosion at six imps",

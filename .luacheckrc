@@ -24,6 +24,7 @@ stds.wow = {
     -- Rules.lua — the readable vocabulary: secondary resources, the cooldown info table,
     -- and the trait config, which is how `talent()` asks whether a node is purchased.
     "UnitPower",
+    "UnitPowerDisplayMod",
     "UnitHealthPercent",
     "Enum",
     "C_Traits",

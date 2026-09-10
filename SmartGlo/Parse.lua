@@ -115,14 +115,20 @@ local function Primary(p)
     return nil, "health is never readable -- UnitHealth is unconditionally secret. It "
       .. "belongs in `bind` as `health% < <n>`, not in `when`"
   end
-  if PRIMARY[tok.text] then
+  -- `soul_shards.after_cast` is one lexer token, so the suffix comes off before the name is
+  -- looked up. Stripping it first is also what lets `mana.after_cast` earn the primary
+  -- refusal rather than the useless "unknown term".
+  local power, projected = tok.text, false
+  local base = string.match(power, "^(.+)%.after_cast$")
+  if base ~= nil then power, projected = base, true end
+  if PRIMARY[power] then
     return nil, ("%s is a primary resource, which is never readable -- it belongs in `bind` "
-      .. "as a percent, not in `when`"):format(tok.text)
+      .. "as a percent, not in `when`"):format(power)
   end
-  if string.match(tok.text, "%.stacks$") or string.match(tok.text, "%.cooldown$") then
-    return nil, ("%s is a sealed term and belongs in `bind`, not in `when`"):format(tok.text)
+  if string.match(power, "%.stacks$") or string.match(power, "%.cooldown$") then
+    return nil, ("%s is a sealed term and belongs in `bind`, not in `when`"):format(power)
   end
-  if not SECONDARY[tok.text] then
+  if not SECONDARY[power] then
     return nil, ("unknown term %q"):format(tok.text)
   end
   local cmp = Take(p)
@@ -133,7 +139,9 @@ local function Primary(p)
   if value.kind ~= "number" then
     return nil, ("expected a number after %s, found %q"):format(cmp.text, value.text)
   end
-  return { t = "resource", power = tok.text, cmp = cmp.text, value = tonumber(value.text) }
+  local node = { t = "resource", power = power, cmp = cmp.text, value = tonumber(value.text) }
+  if projected then node.projected = true end
+  return node
 end
 
 local function Unary(p)

@@ -400,7 +400,13 @@ local override = CreateFrame("Frame")
 override:SetScript("OnEvent", function() Attach.MarkDirty("SpellOverrideUpdated") end)
 
 local events = CreateFrame("Frame")
-events:SetScript("OnEvent", function() Attach.Evaluate() end)
+-- The cast ledger is fed here rather than from a frame of its own: a projected
+-- threshold is read during the evaluation below, so the ledger has to be current
+-- first, and two frames have no ordering between them.
+events:SetScript("OnEvent", function(_, event, _, _, spellID)
+  ns.Cast.Observe(event, spellID)
+  Attach.Evaluate()
+end)
 
 local function RegisterTriggers()
   events:UnregisterAllEvents()
