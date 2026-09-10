@@ -49,11 +49,18 @@ Profiles.list = {
         name = "Tyrant at five shards",
         subject = 265187,
         when = { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
+        urgent = true,
       },
       {
         name = "Hand of Gul'dan capped",
         subject = 105174,
         when = { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
+        urgent = true,
+      },
+      {
+        name = "Hand of Gul'dan in the spend band",
+        subject = 105174,
+        when = { t = "resource", power = "soul_shards", cmp = ">=", value = 4, projected = true },
       },
       {
         name = "Hand of Gul'dan inside the Argus window",
@@ -107,6 +114,17 @@ Profiles.list = {
             { t = "ready", spell = 104316 },
           } },
       },
+      {
+        name = "Power Siphon with imps out",
+        subject = 264130,
+        bind = { family = "count", aura = 296553, threshold = 2 },
+      },
+      {
+        name = "Demonbolt on two Cores",
+        subject = 264178,
+        bind = { family = "count", aura = 264173, threshold = 2 },
+        urgent = true,
+      },
     },
   },
 
@@ -138,17 +156,17 @@ Profiles.list = {
         name = "Execution Sentence into Wake of Ashes",
         subject = 343527,
         when = { t = "and", terms = {
-          { t = "ready", spell = 343527 },
-          { t = "ready", spell = 255937 }
-        } },
+            { t = "ready", spell = 343527 },
+            { t = "ready", spell = 255937 },
+          } },
       },
       {
         name = "Templar's Verdict at cap",
         subject = 85256,
         when = { t = "and", terms = {
-          { t = "resource", power = "holy_power", cmp = "==", value = 5 },
-          { t = "not", term = { t = "ready", spell = 255937 } }
-        } },
+            { t = "resource", power = "holy_power", cmp = "==", value = 5 },
+            { t = "not", term = { t = "ready", spell = 255937 } },
+          } },
       },
       {
         name = "Divine Storm on Empyrean Power",
@@ -159,27 +177,56 @@ Profiles.list = {
         name = "Blade of Justice on a proc",
         subject = 184575,
         when = { t = "or", terms = {
-          { t = "aura", spell = 406064 },
-          { t = "aura", spell = 402912 }
-        } },
+            { t = "aura", spell = 406064 },
+            { t = "aura", spell = 402912 },
+          } },
       },
       {
         name = "Blade of Justice held under Walk Into Light",
         subject = 184575,
         when = { t = "and", terms = {
-          { t = "talent", spell = 1263782 },
-          { t = "aura", spell = 31884 }
-        } },
+            { t = "talent", spell = 1263782 },
+            { t = "aura", spell = 454351 },
+          } },
+      },
+      {
+        name = "Hammer of Wrath at cap",
+        subject = 24275,
+        when = { t = "at_max_charges", spell = 24275 },
+        urgent = true,
+      },
+      {
+        name = "Blade of Justice on capped Art of War",
+        subject = 184575,
+        bind = { family = "count", aura = 406064, threshold = 2 },
+        urgent = true,
+      },
+      {
+        name = "Divine Storm on Divine Arbiter at cap",
+        subject = 53385,
+        when = { t = "and", terms = {
+            { t = "aura", spell = 1306162 },
+            { t = "resource", power = "holy_power", cmp = ">=", value = 5 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Final Verdict at cap",
+        subject = 383328,
+        when = { t = "resource", power = "holy_power", cmp = ">=", value = 5 },
+        urgent = true,
+      },
+      {
+        name = "Judgment with room to spend",
+        subject = 20271,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 20271 },
+            { t = "resource", power = "holy_power", cmp = "<", value = 5 },
+          } },
       },
     },
   },
 
-  -- From the simc `protection` list and Method's 12.1 priority. Same contract as above: a
-  -- lit icon is a rung whose readable conditions hold, not an instruction.
-  --
-  -- No count bind here, though `consecration,if=buff.divine_guidance.stack>=5` is the right
-  -- shape for one and `Rules.Gate` now covers the absence case that ruled it out. It is left
-  -- out because it is a rotation call, not because it cannot be expressed.
   -- From the simc `protection` list, Method's 12.1 priority, and the class KB's own
   -- active-mitigation loop. Same contract as the other profiles: a lit icon is a rung whose
   -- readable conditions hold, not an instruction, and several light at once.
