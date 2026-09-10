@@ -220,6 +220,20 @@ local function Build()
   return f
 end
 
+--- The dialog's box is this addon's only copy surface: WoW has no clipboard API, so anything
+--- a person has to move out of the game lands in a multiline EditBox, preselected for Ctrl+C.
+--- Reading it out of the chat frame means picking our lines out of everyone else's.
+function Config.ShowText(blurb, body)
+  if dialog == nil then dialog = Build() end
+  dialog:Show()
+  selected = nil
+  dialog.detail:SetText(blurb)
+  dialog.edit:SetText(body)
+  dialog.edit:SetFocus()
+  dialog.edit:HighlightText()
+  dialog.status:SetText("Selected -- Ctrl+C to copy.")
+end
+
 function Config.Toggle()
   if dialog == nil then dialog = Build() end
   if dialog:IsShown() then
@@ -265,14 +279,7 @@ ns.RegisterCommand{
       blurb = "Every applied rule, as one share string. Ctrl+C to copy. "
         .. "`/sg export text` gives the editable form."
     end
-    if dialog == nil then dialog = Build() end
-    dialog:Show()
-    selected = nil
-    dialog.detail:SetText(blurb)
-    dialog.edit:SetText(body)
-    dialog.edit:SetFocus()
-    dialog.edit:HighlightText()
-    dialog.status:SetText("Selected -- Ctrl+C to copy.")
+    Config.ShowText(blurb, body)
   end,
 }
 

@@ -524,43 +524,65 @@ function Attach.ReportStatus()
   end
 end
 
+--- One report, built once and rendered plain, so what `/sg why copy` hands you is exactly
+--- what `/sg why` printed. Colour would have to be stripped for the copy and the two would
+--- then be able to disagree.
+local function Report(only)
+  local lines = {}
+  local all = ns.Store.All()
+  if #all == 0 then
+    lines[1] = "no rules applied."
+    return lines
+  end
+  local attachedCount = 0
+  for _, glow in ipairs(all) do
+    if bound[glow.subject] ~= nil then attachedCount = attachedCount + 1 end
+  end
+  lines[#lines + 1] = ("SmartGlo %s -- %d rule(s), %d attached to a laid-out row")
+    :format(tostring(ns.version), #all, attachedCount)
+  for _, glow in ipairs(all) do
+    if only == nil or glow.subject == only then
+      local verdict, trace = ns.Rules.Evaluate(ns.Rules.Gate(glow))
+      local attached = "no laid-out row"
+      if bound[glow.subject] ~= nil then attached = "attached" end
+      lines[#lines + 1] = ("%s on %s -- %s, %s"):format(glow.name or "(unnamed)",
+        ns.SpellLabel(glow.subject), verdict, attached)
+      for _, row in ipairs(trace) do
+        lines[#lines + 1] = ("    [%s] %s"):format(row.verdict, row.text)
+      end
+      -- A sealed bind has no verdict to print: nothing here read it. What can be shown is
+      -- what was handed to the client -- the count element's arm report, or the curve the
+      -- duration bind compiled to.
+      if ns.Count.Owns(glow) then
+        lines[#lines + 1] = ("    [sealed] %s -- %s"):format(ns.Rules.DescribeBind(glow.bind),
+          ns.Count.Describe(glow.subject))
+      elseif ns.Duration.Owns(glow) then
+        lines[#lines + 1] = ("    %s -- %s"):format(ns.Duration.Describe(glow.bind),
+          ns.Rules.DescribeBind(glow.bind))
+      elseif ns.Health.Owns(glow) then
+        lines[#lines + 1] = ("    %s -- %s"):format(ns.Health.Describe(glow.bind),
+          ns.Rules.DescribeBind(glow.bind))
+      elseif glow.bind ~= nil then
+        lines[#lines + 1] = ("    [sealed] %s"):format(ns.Rules.DescribeBind(glow.bind))
+      end
+    end
+  end
+  return lines
+end
+
 ns.RegisterCommand{
   name = "why",
-  args = "[spellID]",
-  desc = "per-term T/F/? for every applied rule",
+  args = "[spellID|copy]",
+  desc = "per-term T/F/? for every applied rule; `copy` puts it in a box instead of chat",
   handler = function(rest)
-    local only = tonumber(string.match(rest or "", "^(%S*)"))
-    local all = ns.Store.All()
-    if #all == 0 then
-      ns.Print("no rules applied.")
+    local word = string.match(rest or "", "^(%S*)")
+    if word == "copy" then
+      ns.Config.ShowText("Every applied rule with its per-term T/F/? verdicts. Ctrl+C to copy.",
+        table.concat(Report(nil), "\n"))
       return
     end
-    for _, glow in ipairs(all) do
-      if only == nil or glow.subject == only then
-        local verdict, trace = ns.Rules.Evaluate(ns.Rules.Gate(glow))
-        local attached = "no laid-out row"
-        if bound[glow.subject] ~= nil then attached = "attached" end
-        ns.Printf("%s |cff999999on %s -- %s, %s|r", glow.name or "(unnamed)",
-          ns.SpellLabel(glow.subject), verdict, attached)
-        for _, row in ipairs(trace) do
-          ns.Printf("    [%s] %s", row.verdict, row.text)
-        end
-        -- A sealed bind has no verdict to print: nothing here read it. What can be shown is
-        -- what was handed to the client -- the count element's arm report, or the curve the
-        -- duration bind compiled to.
-        if ns.Count.Owns(glow) then
-          ns.Printf("    [sealed] %s -- %s", ns.Rules.DescribeBind(glow.bind),
-            ns.Count.Describe(glow.subject))
-        elseif ns.Duration.Owns(glow) then
-          ns.Printf("    %s -- %s", ns.Duration.Describe(glow.bind),
-            ns.Rules.DescribeBind(glow.bind))
-        elseif ns.Health.Owns(glow) then
-          ns.Printf("    %s -- %s", ns.Health.Describe(glow.bind),
-            ns.Rules.DescribeBind(glow.bind))
-        elseif glow.bind ~= nil then
-          ns.Printf("    [sealed] %s", ns.Rules.DescribeBind(glow.bind))
-        end
-      end
+    for _, line in ipairs(Report(tonumber(word))) do
+      ns.Print(line)
     end
   end,
 }
