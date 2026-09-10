@@ -20,6 +20,7 @@ Store.lua
 Overlay.lua
 Attach.lua
 Count.lua
+Presence.lua
 Duration.lua
 Health.lua
 Config.lua

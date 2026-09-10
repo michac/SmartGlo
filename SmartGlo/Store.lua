@@ -74,6 +74,7 @@ function Store.SetForSubject(spellID, list)
   db.glows = kept
   ns.Attach.Refresh()
   ns.Count.Rebuild()
+  ns.Presence.Rebuild()
   return true
 end
 
@@ -89,6 +90,7 @@ function Store.Replace(list)
   db.glows = list
   ns.Attach.Refresh()
   ns.Count.Rebuild()
+  ns.Presence.Rebuild()
   return true
 end
 

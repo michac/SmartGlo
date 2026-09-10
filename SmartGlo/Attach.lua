@@ -363,7 +363,7 @@ end
 --- Both sealed families write the mark's alpha themselves, so `Overlay.SetLit` must leave
 --- that channel alone for either of them.
 local function SealsAlpha(glow)
-  return ns.Duration.Owns(glow) or ns.Health.Owns(glow)
+  return ns.Duration.Owns(glow) or ns.Health.Owns(glow) or ns.Presence.Owns(glow)
 end
 
 function Attach.Evaluate()
@@ -395,6 +395,7 @@ function Attach.Evaluate()
   end
   ns.Duration.Refresh()
   ns.Health.Refresh()
+  ns.Presence.Rebuild()
 end
 
 -- ------------------------------------------------------------------ the wiring
@@ -565,6 +566,9 @@ local function Report(only)
       elseif ns.Duration.Owns(glow) then
         lines[#lines + 1] = ("    %s -- %s"):format(ns.Duration.Describe(glow.bind),
           ns.Rules.DescribeBind(glow.bind))
+      elseif ns.Presence.Owns(glow) then
+        lines[#lines + 1] = ("    [sealed] %s -- %s"):format(ns.Rules.DescribeBind(glow.bind),
+          ns.Presence.Describe(glow))
       elseif ns.Health.Owns(glow) then
         lines[#lines + 1] = ("    %s -- %s"):format(ns.Health.Describe(glow.bind),
           ns.Rules.DescribeBind(glow.bind))

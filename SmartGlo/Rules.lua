@@ -43,7 +43,7 @@ local CMP = {
 
 --- The bowl catalogue: a term named on the wrong side is refused BY NAME in both directions,
 --- which is what makes the sorting enforced rather than remembered.
-local SEALED_FAMILY = { count = true, duration = true }
+local SEALED_FAMILY = { count = true, duration = true, presence = true }
 
 --- Every readable term that is a call over ONE spell. Named once: the checker, the renderer
 --- and the trigger table all ask this, so a new call cannot be half-added.
@@ -53,6 +53,10 @@ local SPELL_TERM = {
 
 local READABLE_TERM = { resource = true }
 for name in pairs(SPELL_TERM) do READABLE_TERM[name] = true end
+
+--- The filter components a presence bind may name. A subset of `AuraUtil.AuraFilters` on
+--- purpose: these are the ones the grammar can produce, and the client asserts on the rest.
+local FILTER_COMPONENT = { HELPFUL = true, HARMFUL = true, PLAYER = true }
 
 --- `<` and `outside` on a cooldown are also true at zero remaining, and zero remaining means
 --- the spell is READY -- so such a bind glows permanently while its subject is up unless the
@@ -187,6 +191,21 @@ local function CheckBind(bind, when, errs)
       table.insert(errs, ("`%s` on a cooldown is also true when the spell is READY, so this "
         .. "would glow permanently while it is up. Add `not ready(...)` to `when`, or set "
         .. "`absent` to \"dark\" or \"show\" on the bind"):format(tostring(bind.cmp)))
+    end
+  elseif bind.family == "presence" then
+    if type(bind.aura) ~= "number" then
+      table.insert(errs, "a presence bind needs a numeric aura id")
+    end
+    if bind.unit ~= "player" and bind.unit ~= "target" then
+      table.insert(errs, ("unknown unit %q; a presence bind reads `player` or `target`")
+        :format(tostring(bind.unit)))
+    end
+    -- `AuraUtil.IsValidFilterString` ASSERTS, so a component the client does not know is a
+    -- hard error inside `AddAuraSlot` rather than an empty result. Refuse it here instead.
+    for component in string.gmatch(tostring(bind.filter), "[^|]+") do
+      if not FILTER_COMPONENT[component] then
+        table.insert(errs, ("unknown aura filter %q"):format(component))
+      end
     end
   elseif bind.family == "health" then
     if CMP[bind.cmp] == nil or bind.cmp == "==" then
@@ -684,6 +703,12 @@ function Rules.DescribeBind(bind)
   end
   if bind.family == "health" then
     return ("health%% %s %s"):format(bind.cmp, bind.percent)
+  end
+  if bind.family == "presence" then
+    local body = ("%s.up"):format(Rules.Label(bind.aura))
+    if bind.unit ~= "player" then body = body .. " on " .. bind.unit end
+    if string.find(bind.filter, "PLAYER", 1, true) then body = body .. " mine" end
+    return body
   end
   if bind.family == "duration" then
     local body

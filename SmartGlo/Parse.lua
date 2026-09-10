@@ -27,8 +27,8 @@ local CALLS = {
   ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
 }
 
-local BIND_FORMS = "<spell>.stacks >= <n> | <spell>.cooldown > <n>s "
-  .. "| <spell>.cooldown outside <a>s..<b>s | health% < <n>"
+local BIND_FORMS = "<spell>.stacks >= <n> | <spell>.up [on <unit>] [mine] "
+  .. "| <spell>.cooldown > <n>s | <spell>.cooldown outside <a>s..<b>s | health% < <n>"
 
 -- ------------------------------------------------------------------- the lexer
 
@@ -211,6 +211,23 @@ local function Absent(rest)
   return word
 end
 
+--- Trim a reference the pattern captured. `ref0` keeps the call sites honest about the fact
+--- that a captured group can carry surrounding space.
+local function ref0(text)
+  return (string.gsub(text or "", "^%s*(.-)%s*$", "%1"))
+end
+
+--- Both container-backed binds name an aura rather than an ability, and neither reads through
+--- a Cooldown Manager row -- so the tracked names answer first and the ability inventory is
+--- the fallback, not a different meaning.
+local function ResolveAura(text, scope)
+  local id, why = ns.Names.Resolve(text, scope, "aura")
+  if id ~= nil then return id end
+  local fallback = ns.Names.Resolve(text, scope, "ability")
+  if fallback ~= nil then return fallback end
+  return nil, why
+end
+
 local function ParseBind(text, scope)
   local ref, n = string.match(text, "^(.-)%.stacks%s*>=%s*(%d+)$")
   if ref == nil then
@@ -222,12 +239,8 @@ local function ParseBind(text, scope)
     -- is exactly its universe. Try the tracked names first, then the ability inventory --
     -- two sources for one question, so a fallback widens what resolves and cannot change
     -- what an existing rule means.
-    local aura, why = ns.Names.Resolve(ref, scope, "aura")
-    if aura == nil then
-      local fallback = ns.Names.Resolve(ref, scope, "ability")
-      if fallback == nil then return nil, why end
-      aura = fallback
-    end
+    local aura, why = ResolveAura(ref, scope)
+    if aura == nil then return nil, why end
     return { family = "count", aura = aura, threshold = tonumber(n) }
   end
 
@@ -255,6 +268,31 @@ local function ParseBind(text, scope)
     if absent == nil and absentWhy ~= nil then return nil, absentWhy end
     return { family = "duration", spell = spell, cmp = cmp,
       seconds = tonumber(n), absent = absent }
+  end
+
+  -- `<spell>.up [on <unit>] [mine]`. The unit picks the default filter, because the useful
+  -- pair is a buff on you and a debuff on your target; `mine` adds PLAYER, which NARROWS to
+  -- auras you applied rather than being what you are limited to.
+  local spellRef, tail = string.match(text, "^(.-)%.up%s*(.*)$")
+  if spellRef ~= nil then
+    local unit = "player"
+    local unitWord, rest2 = string.match(tail, "^on%s+(%S+)%s*(.*)$")
+    if unitWord ~= nil then
+      unit, tail = unitWord, rest2
+    end
+    local mine = string.match(tail, "^mine%s*$") ~= nil
+    if tail ~= "" and not mine then
+      return nil, ("trailing %q; a presence bind reads `<spell>.up [on <unit>] [mine]`")
+        :format(tail)
+    end
+    if unit ~= "player" and unit ~= "target" then
+      return nil, ("unknown unit %q; a presence bind reads `player` or `target`"):format(unit)
+    end
+    local aura, why = ResolveAura(ref0(spellRef), scope)
+    if aura == nil then return nil, why end
+    local filter = unit == "target" and "HARMFUL" or "HELPFUL"
+    if mine then filter = filter .. "|PLAYER" end
+    return { family = "presence", aura = aura, unit = unit, filter = filter }
   end
 
   local pct
