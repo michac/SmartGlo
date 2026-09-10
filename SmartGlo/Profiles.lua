@@ -343,6 +343,16 @@ Profiles.list = {
         bind = { family = "duration", spell = 31850, cmp = "<", seconds = 1000,
                  absent = "dark" },
       },
+      -- The `outside` form, which is the only compile shape with two transitions and has
+      -- never run. On Divine Toll, off Ardent Defender's ~90s cooldown, one icon shows all
+      -- three edges in one press: LIT from the cast down to 60s, DARK through 60..30, LIT
+      -- again under 30, then DARK when the spell comes up.
+      {
+        name = "DPROBE: outside 30s..60s (three edges on one icon)",
+        subject = 375576,
+        bind = { family = "duration", spell = 31850, cmp = "outside", lo = 30, hi = 60,
+                 absent = "dark" },
+      },
     },
   },
 }

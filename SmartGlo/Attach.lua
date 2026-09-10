@@ -572,13 +572,24 @@ end
 
 ns.RegisterCommand{
   name = "why",
-  args = "[spellID|copy]",
-  desc = "per-term T/F/? for every applied rule; `copy` puts it in a box instead of chat",
+  args = "[spellID|copy|log]",
+  desc = "per-term T/F/? per rule; `copy` for a box, `log` for the capture stream",
   handler = function(rest)
     local word = string.match(rest or "", "^(%S*)")
     if word == "copy" then
       ns.Config.ShowText("Every applied rule with its per-term T/F/? verdicts. Ctrl+C to copy.",
         table.concat(Report(nil), "\n"))
+      return
+    end
+    -- `Note` records a verdict CHANGE, so a rule that sat at one verdict all session is a
+    -- single old line. This writes the whole snapshot, which is what a reader off the log
+    -- needs and what no amount of watching the chat frame produces.
+    if word == "log" then
+      local lines = Report(nil)
+      ns.log:Mark("---- /sg why ----")
+      for _, line in ipairs(lines) do ns.log:Mark("%s", ns.Capture.Safe(line)) end
+      ns.Printf("%d line(s) written to the attach capture. /reload to flush, then read it "
+        .. "with: uv run python -m wowkb.capture sg attach", #lines)
       return
     end
     for _, line in ipairs(Report(tonumber(word))) do
