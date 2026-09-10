@@ -397,7 +397,10 @@ Profiles.list = {
                 { t = "and", terms = {
                     { t = "and", terms = {
                         { t = "and", terms = {
-                            { t = "ready", spell = 642 },
+                            { t = "and", terms = {
+                                { t = "talent", spell = 204077 },
+                                { t = "ready", spell = 642 },
+                              } },
                             { t = "not", term = { t = "aura", spell = 31850 } },
                           } },
                         { t = "not", term = { t = "aura", spell = 86659 } },
