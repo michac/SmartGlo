@@ -21,6 +21,7 @@ Overlay.lua
 Attach.lua
 Count.lua
 Presence.lua
+Procs.lua
 Duration.lua
 Health.lua
 Config.lua

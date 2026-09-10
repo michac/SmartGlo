@@ -19,6 +19,7 @@ end
 function Store.Load()
   if type(SmartGloDB) ~= "table" then SmartGloDB = {} end
   if type(SmartGloDB.glows) ~= "table" then SmartGloDB.glows = {} end
+  if type(SmartGloDB.settings) ~= "table" then SmartGloDB.settings = {} end
   db = SmartGloDB
   ns.db = db
   -- Rules stored before the two bowls carry `show` and `count`; they mean what `when` and a
@@ -76,6 +77,26 @@ function Store.SetForSubject(spellID, list)
   ns.Count.Rebuild()
   ns.Presence.Rebuild()
   return true
+end
+
+--- Flat per-character switches, beside the rules rather than inside them: a setting is not a
+--- rule and must not ride the import/export string a rule set travels in.
+function Store.Setting(key)
+  return db and db.settings and db.settings[key]
+end
+
+function Store.SetSetting(key, value)
+  if db == nil then return end
+  db.settings[key] = value
+end
+
+--- Does any applied rule name this subject? The proc suppression is scoped to rows we speak
+--- for, because on a row we say nothing about, Blizzard's alert is the only thing said.
+function Store.Speaks(subject)
+  for _, glow in ipairs(Store.All()) do
+    if glow.subject == subject then return true end
+  end
+  return false
 end
 
 function Store.Replace(list)

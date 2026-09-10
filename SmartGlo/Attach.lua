@@ -397,6 +397,7 @@ function Attach.Evaluate()
   ns.Duration.Refresh()
   ns.Health.Refresh()
   ns.Presence.Rebuild()
+  ns.Procs.Refresh()
 end
 
 -- ------------------------------------------------------------------ the wiring
@@ -446,6 +447,8 @@ local function InstallHooks()
       hooksecurefunc(mixin, "OnCooldownIDSet", function() Attach.MarkDirty("OnCooldownIDSet") end)
     end
   end
+
+  ns.Procs.InstallHooks(MIXIN_NAMES)
 
   EventRegistry:RegisterCallback("CooldownViewerSettings.OnDataChanged",
     function() Attach.MarkDirty("OnDataChanged") end)
@@ -517,6 +520,20 @@ end
 --- may name a spell that is not its glow's subject, so this is keyed on the spell.
 function Attach.ItemFor(spell)
   return bound[spell]
+end
+
+--- The whole bound map, for a sweep that needs every laid-out row rather than one.
+function Attach.Bound()
+  return bound
+end
+
+--- Which subject an item frame is currently showing -- the reverse of `bound`, walked rather
+--- than kept, because a second table keyed the other way is a second thing to invalidate.
+function Attach.SubjectOf(item)
+  for subject, bound_item in pairs(bound) do
+    if bound_item == item then return subject end
+  end
+  return nil
 end
 
 function Attach.ReportStatus()
