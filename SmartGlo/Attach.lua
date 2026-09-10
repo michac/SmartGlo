@@ -367,6 +367,7 @@ local function SealsAlpha(glow)
 end
 
 function Attach.Evaluate()
+  local live = {}
   for _, glow in ipairs(ns.Store.All()) do
     local item = bound[glow.subject]
     local open = false
@@ -385,8 +386,10 @@ function Attach.Evaluate()
     -- with the occluder over it, and lets the client take the occluder away at the
     -- threshold. So `open` means the same thing in both: the rule's readable half passed.
     local element = ns.Overlay.Element(glow)
+    live[element] = true
     ns.Overlay.SetLit(element, open, glow.color or ns.Look.DEFAULT, SealsAlpha(glow))
   end
+  ns.Overlay.DarkenStale(live)
   for subject in pairs(bound) do
     ns.Overlay.SetVisible(ns.Overlay.For(subject), not editing)
   end

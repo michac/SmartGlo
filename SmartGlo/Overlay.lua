@@ -120,6 +120,21 @@ function Overlay.SetVisible(f, visible)
   if visible then f:SetAlpha(1) else f:SetAlpha(0) end
 end
 
+--- An element outlives the rule that built it -- elements are never destroyed, because a
+--- count's aura container may only be armed once. So a rule set replaced under a live overlay
+--- leaves marks nothing writes any more, frozen at the alpha they last held, and a sealed one
+--- has no ticker left to darken it. Anything no current glow owns is taken dark here.
+function Overlay.DarkenStale(live)
+  for _, f in pairs(frames) do
+    for _, e in pairs(f.elements) do
+      if not live[e] then
+        e:SetAlpha(0)
+        e.mark:SetAlpha(0)
+      end
+    end
+  end
+end
+
 --- The gate, and the tint that goes with it. The COLOUR write is unconditional -- vertex
 --- colour carries no secret and is a different channel from alpha. The MARK's alpha is
 --- written only for an element whose mark nothing has sealed. A count element is NOT sealed
