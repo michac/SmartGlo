@@ -233,6 +233,28 @@ Profiles.list = {
           { t = "aura", spell = 31884 }
         } },
       },
+      -- Avenging Wrath and Sentinel are a CHOICE NODE, so both sides ship and the untalented
+      -- one cannot fire: `ready()` reads UNKNOWN for a spell you do not know, and its row is
+      -- never laid out. The APL is no guide here -- it names Sentinel nowhere and simply plays
+      -- the Avenging Wrath side -- so these two mirror the Wrath rungs onto 389539.
+      -- ⚠ The buff Sentinel applies is Divine Resolve, whose id the KB does not carry. If
+      -- `aura(389539)` reads `?`, that row does not carry the buff and the id is what to fix.
+      {
+        name = "Sentinel with Divine Toll up",
+        subject = 389539,
+        when = { t = "and", terms = {
+          { t = "ready", spell = 389539 },
+          { t = "ready", spell = 375576 }
+        } },
+      },
+      {
+        name = "Divine Toll inside Sentinel",
+        subject = 375576,
+        when = { t = "and", terms = {
+          { t = "ready", spell = 375576 },
+          { t = "aura", spell = 389539 }
+        } },
+      },
       -- The BUILDERS. `judgment,if=full_recharge_time<=gcd*2` is a "you are about to waste a
       -- charge" rung, and at-the-cap is its readable half: strictly later than the APL's, so
       -- it under-marks rather than over-marks. Crusader's Judgment adds the second charge; on
