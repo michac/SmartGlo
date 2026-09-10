@@ -217,8 +217,17 @@ local function ParseBind(text, scope)
     ref, n = string.match(text, "^count%(%s*(.-)%s*%)%s*>=%s*(%d+)$")
   end
   if ref ~= nil then
-    local aura, why = ns.Names.Resolve(ref, scope)
-    if aura == nil then return nil, why end
+    -- A count bind does NOT read through a Cooldown Manager row: it pins an AuraContainer
+    -- slot by spell id on the player, so its reach is wider than `aura()`'s and neither table
+    -- is exactly its universe. Try the tracked names first, then the ability inventory --
+    -- two sources for one question, so a fallback widens what resolves and cannot change
+    -- what an existing rule means.
+    local aura, why = ns.Names.Resolve(ref, scope, "aura")
+    if aura == nil then
+      local fallback = ns.Names.Resolve(ref, scope, "ability")
+      if fallback == nil then return nil, why end
+      aura = fallback
+    end
     return { family = "count", aura = aura, threshold = tonumber(n) }
   end
 
