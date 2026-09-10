@@ -38,6 +38,12 @@ local function Missing()
   return nil
 end
 
+--- A READY spell still hands back a duration object, one reading zero remaining -- readiness
+--- is a VALUE here, not an absent object -- so the `absent` tail never fires for it and a band
+--- that starts at zero glows permanently while the spell is up. Every curve whose low end
+--- lights therefore opens just above zero. ElvUI guards the same edge with the same epsilon.
+local READY = 0.001
+
 --- Step is a floor, so `>` and `>=` compile to the SAME curve: the client draws in whole
 --- steps and cannot express the open end of an interval. Normalising says so rather than
 --- pretending to a distinction that would silently not exist.
@@ -46,15 +52,19 @@ end
 local function Compile(bind)
   local curve = C_CurveUtil.CreateCurve()
   curve:SetType(Enum.LuaCurveType.Step)
-  if bind.cmp == "outside" then
-    curve:AddPoint(0, 1)
-    curve:AddPoint(bind.lo, 0)
-    curve:AddPoint(bind.hi, 1)
-  elseif bind.cmp == ">" or bind.cmp == ">=" then
+  if bind.cmp == ">" or bind.cmp == ">=" then
     curve:AddPoint(0, 0)
     curve:AddPoint(bind.seconds, 1)
+    return curve
+  end
+  -- A threshold at or under the guard leaves no band to light, and dark is the honest outcome.
+  local opens = bind.cmp == "outside" and bind.lo or bind.seconds
+  curve:AddPoint(0, 0)
+  if opens > READY then curve:AddPoint(READY, 1) end
+  if bind.cmp == "outside" then
+    curve:AddPoint(bind.lo, 0)
+    curve:AddPoint(bind.hi, 1)
   else
-    curve:AddPoint(0, 1)
     curve:AddPoint(bind.seconds, 0)
   end
   return curve
@@ -170,11 +180,13 @@ end
 --- What `/sg why` can honestly say about a sealed bind: the points it compiled to. There is
 --- no readback of what the client drew, so the compiled curve is the whole story.
 function Duration.Describe(bind)
-  if bind.cmp == "outside" then
-    return ("[sealed] Step (0,1) (%s,0) (%s,1)"):format(bind.lo, bind.hi)
-  end
   if bind.cmp == ">" or bind.cmp == ">=" then
     return ("[sealed] Step (0,0) (%s,1)"):format(bind.seconds)
   end
-  return ("[sealed] Step (0,1) (%s,0)"):format(bind.seconds)
+  local opens = bind.cmp == "outside" and bind.lo or bind.seconds
+  local guard = opens > READY and ("(%s,1) "):format(READY) or ""
+  if bind.cmp == "outside" then
+    return ("[sealed] Step (0,0) %s(%s,0) (%s,1)"):format(guard, bind.lo, bind.hi)
+  end
+  return ("[sealed] Step (0,0) %s(%s,0)"):format(guard, bind.seconds)
 end
