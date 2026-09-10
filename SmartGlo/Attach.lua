@@ -163,10 +163,10 @@ end
 -- client's own answer to "is it up NOW", carried on the frame it already laid out, so
 -- reading them costs no aura call and is not subject to the per-spell aura allowlist.
 --
--- ⚠ `wasSetFromAura` is UNMEASURED: it is named by a third-party addon, not by Blizzard's
--- generated docs (mined-pending-verification.md E2). Nothing here asserts it exists. A frame
--- that answers neither field returns nil and the caller falls back to the edge latch, so on
--- a client without them this whole path is dead weight rather than a wrong answer.
+-- `wasSetFromAura` is one of Blizzard's five visual-data-source flags, with accessors and a
+-- clearer of its own, and the three spell-source flags read plain in and out of combat
+-- (cooldown-manager.md §7). `auraInstanceID` is the half that remains unverified. A frame
+-- that answers neither field returns nil and the caller falls back to the edge latch.
 
 --- true | false | nil, where nil means "this frame cannot say" and never "absent".
 ---
@@ -190,8 +190,8 @@ local function ReadBuffActive(item)
 end
 
 --- The cooldown viewers have no such predicate, so only these two fields can speak there.
---- ⚠ `wasSetFromAura` is UNMEASURED: it is named by a third-party addon, not by Blizzard's
---- generated docs (mined-pending-verification.md E2). Nothing here asserts it exists. A frame
+--- ⚠ `auraInstanceID` is the unverified half: `wasSetFromAura` is Blizzard's own field and
+--- measured readable, that one is neither. A frame
 --- answering neither field returns nil and the caller falls back to the edge latch, so on a
 --- client without them this path is dead weight rather than a wrong answer.
 local function ReadFieldPresence(item)
@@ -509,6 +509,12 @@ function Attach.IconOf(subject)
   local okTex, tex = pcall(item.GetSpellTexture, item)
   if okTex and not ns.IsSecret(tex) and type(tex) == "number" and tex ~= 0 then return tex end
   return nil
+end
+
+--- The live CDM item frame a spell is bound to, or nil when no viewer laid one out. A term
+--- may name a spell that is not its glow's subject, so this is keyed on the spell.
+function Attach.ItemFor(spell)
+  return bound[spell]
 end
 
 function Attach.ReportStatus()

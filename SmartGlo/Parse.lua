@@ -21,7 +21,11 @@ local SECONDARY = {
   soul_shards = true, holy_power = true, combo_points = true, chi = true,
   arcane_charges = true, essence = true, runes = true,
 }
-local CALLS = { ready = true, aura = true, talent = true }
+--- Every readable call over one spell. `at_max_charges` and `no_charges` are BOOLEANS off
+--- the CDM's own verdict flags, not charge counts -- a count stays refused, in both bowls.
+local CALLS = {
+  ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
+}
 
 local BIND_FORMS = "<spell>.stacks >= <n> | <spell>.cooldown > <n>s "
   .. "| <spell>.cooldown outside <a>s..<b>s | health% < <n>"

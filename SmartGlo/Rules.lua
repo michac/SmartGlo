@@ -44,7 +44,15 @@ local CMP = {
 --- The bowl catalogue: a term named on the wrong side is refused BY NAME in both directions,
 --- which is what makes the sorting enforced rather than remembered.
 local SEALED_FAMILY = { count = true, duration = true }
-local READABLE_TERM = { resource = true, ready = true, aura = true, talent = true }
+
+--- Every readable term that is a call over ONE spell. Named once: the checker, the renderer
+--- and the trigger table all ask this, so a new call cannot be half-added.
+local SPELL_TERM = {
+  ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
+}
+
+local READABLE_TERM = { resource = true }
+for name in pairs(SPELL_TERM) do READABLE_TERM[name] = true end
 
 --- `<` and `outside` on a cooldown are also true at zero remaining, and zero remaining means
 --- the spell is READY -- so such a bind glows permanently while its subject is up unless the
@@ -119,7 +127,7 @@ function Check(term, errs, depth)
         .. "depends on talents and procs for every resource but soul_shards, so there is no "
         .. "one number to project with"):format(term.power))
     end
-  elseif term.t == "ready" or term.t == "aura" or term.t == "talent" then
+  elseif SPELL_TERM[term.t] then
     if type(term.spell) ~= "number" then
       table.insert(errs, term.t .. "() needs a spell id")
     end
@@ -351,6 +359,62 @@ local function EvalReady(term, trace)
   return verdict
 end
 
+--- Charge STATE off the Cooldown Manager's own verdict, without reading a charge count.
+---
+--- `CheckCacheCooldownValuesFromCharges` sets `wasSetFromCharges` iff a recharge is running
+--- AND at least one charge is banked, and Blizzard's comment says why: charge values take
+--- precedence over the spell's own cooldown "until the charges are spent", after which
+--- `wasSetFromCooldown` drives instead. So the two flags separate all three states, and the
+--- secret `currentCharges` never has to be read -- Blizzard branches on it in untainted code
+--- and assigns a literal, so the seal does not travel.
+---
+--- ⚠ `wasSetFromAura` is deliberately not consulted: an aura may drive the dial while the
+--- spell sits at full charges, so requiring the dial to be hidden would read a capped spell
+--- as uncapped. The two flags below are the whole question.
+--- ⚠ On a spell with ONE charge these degenerate to off-cooldown / on-cooldown, which is
+--- honest rather than wrong, and `ready()` says the same thing more plainly.
+local function ReadFlag(item, field)
+  local ok, value = pcall(function() return item[field] end)
+  if not ok then return nil, ("%s refused"):format(field) end
+  if ns.IsSecret(value) then return nil, ("%s is secret"):format(field) end
+  if value == nil then return nil end
+  if type(value) ~= "boolean" then return nil, ("%s is not a boolean"):format(field) end
+  return value
+end
+
+local function EvalCharges(term, trace, wantMax)
+  local label = ("%s(%s)"):format(term.t, Rules.Pretty(term.spell))
+  local item = ns.Attach.ItemFor(term.spell)
+  if item == nil then
+    trace[#trace + 1] = { text = label .. ": no Cooldown Manager row is laid out for it",
+      verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  local charges, chargesWhy = ReadFlag(item, "wasSetFromCharges")
+  local cooldown, cooldownWhy = ReadFlag(item, "wasSetFromCooldown")
+  local why = chargesWhy or cooldownWhy
+  if why ~= nil then
+    trace[#trace + 1] = { text = label .. ": " .. why, verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  -- Both nil is a row that has not refreshed since its sources were cleared, which is not
+  -- the same as both false and must not be reported as "at max".
+  if charges == nil and cooldown == nil then
+    trace[#trace + 1] = { text = label .. ": the row has set no visual data source yet",
+      verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  charges, cooldown = charges == true, cooldown == true
+  local verdict
+  if wantMax then
+    verdict = (not charges and not cooldown) and ns.T or ns.F
+  else
+    verdict = (cooldown and not charges) and ns.T or ns.F
+  end
+  trace[#trace + 1] = { text = label, verdict = verdict }
+  return verdict
+end
+
 --- Aura presence rides the CDM's own alert edges: a row nobody bound raises none, and that
 --- is UNKNOWN rather than absent (cooldown-manager.md §5.1).
 local function EvalAura(term, trace)
@@ -522,6 +586,10 @@ function Eval(term, trace)
     return EvalReady(term, trace)
   elseif term.t == "aura" then
     return EvalAura(term, trace)
+  elseif term.t == "at_max_charges" then
+    return EvalCharges(term, trace, true)
+  elseif term.t == "no_charges" then
+    return EvalCharges(term, trace, false)
   elseif term.t == "talent" then
     return EvalTalent(term, trace)
   end
@@ -564,6 +632,8 @@ local TRIGGERS = {
   resource = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" },
   ready = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_USABLE", "SPELL_UPDATE_CHARGES" },
   aura = {},
+  at_max_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
+  no_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
   -- ⚠ NOT the events that make a talent readable -- those are handled by the prime above,
   -- out of combat. These are here so a glow carrying a talent term still re-evaluates when
   -- the trigger union is what drives the attach path.
@@ -599,7 +669,7 @@ local function Describe(expr)
   elseif expr.t == "resource" then
     return ("%s%s %s %s"):format(expr.power, expr.projected and ".after_cast" or "",
       expr.cmp, tostring(expr.value))
-  elseif expr.t == "ready" or expr.t == "aura" or expr.t == "talent" then
+  elseif SPELL_TERM[expr.t] then
     return expr.t .. "(" .. Rules.Label(expr.spell) .. ")"
   end
   return tostring(expr.t)

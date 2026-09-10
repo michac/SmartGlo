@@ -204,10 +204,13 @@ Profiles.list = {
         when = { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
         bind = { cmp = "<", family = "health", percent = 80 },
       },
+      -- Not `ready()`: a mark that means "this button is available" says what the icon's own
+      -- swipe already says. At the cap the next charge is being thrown away, which is a
+      -- decision, and the CDM's own visual-source flags answer it without a charge count.
       {
-        name = "Holy Armaments",
+        name = "Holy Armaments capped",
         subject = 432459,
-        when = { t = "ready", spell = 432459 },
+        when = { t = "at_max_charges", spell = 432459 },
       },
       {
         name = "Avenger's Shield on Glory of the Vanguard",
