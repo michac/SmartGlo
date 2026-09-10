@@ -233,6 +233,38 @@ Profiles.list = {
           { t = "aura", spell = 31884 }
         } },
       },
+      -- The BUILDERS. `judgment,if=full_recharge_time<=gcd*2` is a "you are about to waste a
+      -- charge" rung, and at-the-cap is its readable half: strictly later than the APL's, so
+      -- it under-marks rather than over-marks. Crusader's Judgment adds the second charge; on
+      -- a build without it this reads as plain off-cooldown, which is honest either way.
+      {
+        name = "Judgment at cap",
+        subject = 20271,
+        when = { t = "at_max_charges", spell = 20271 },
+      },
+      -- The filler builder is a CHOICE NODE, so both rungs ship and only the talented one can
+      -- ever attach -- the other has no laid-out row and stays dark. Three charges is where a
+      -- Protection rotation actually leaks, which makes the cap the rung worth marking.
+      {
+        name = "Blessed Hammer at cap",
+        subject = 204019,
+        when = { t = "at_max_charges", spell = 204019 },
+      },
+      {
+        name = "Hammer of the Righteous at cap",
+        subject = 53595,
+        when = { t = "at_max_charges", spell = 53595 },
+      },
+      {
+        name = "Blessed Hammer on Blessed Assurance",
+        subject = 204019,
+        when = { t = "aura", spell = 433015 },
+      },
+      {
+        name = "Hammer of the Righteous on Blessed Assurance",
+        subject = 53595,
+        when = { t = "aura", spell = 433015 },
+      },
       {
         name = "Consecration when you are not in it",
         subject = 26573,
