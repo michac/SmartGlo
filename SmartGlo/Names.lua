@@ -48,8 +48,8 @@ local function AuraRefusal(key, bare)
       .. "row, so a buff with no tracked row cannot be named here"):format(key, bare)
   end
   local parts = {}
-  for _, id in ipairs(ids) do parts[#parts + 1] = tostring(id) end
-  return ("%q names %d tracked rows in %s (%s); write the id you mean"):format(
+  for _, id in ipairs(ids) do parts[#parts + 1] = ("%s_%d"):format(bare, id) end
+  return ("%q names %d tracked rows in %s; write one of %s"):format(
     bare, #ids, key, table.concat(parts, ", "))
 end
 
