@@ -6741,6 +6741,55 @@ Symbols.auraAmbiguous = {
   },
 }
 
+--- Spec id -> the key the tables above use. The client names a spec by number, so
+--- checking the aura table against the live category sets needs this to join them.
+Symbols.specIDs = {
+  [102] = "druid.balance",
+  [103] = "druid.feral",
+  [104] = "druid.guardian",
+  [105] = "druid.restoration",
+  [1467] = "evoker.devastation",
+  [1468] = "evoker.preservation",
+  [1473] = "evoker.augmentation",
+  [1480] = "demon_hunter.devourer",
+  [250] = "death_knight.blood",
+  [251] = "death_knight.frost",
+  [252] = "death_knight.unholy",
+  [253] = "hunter.beast_mastery",
+  [254] = "hunter.marksmanship",
+  [255] = "hunter.survival",
+  [256] = "priest.discipline",
+  [257] = "priest.holy",
+  [258] = "priest.shadow",
+  [259] = "rogue.assassination",
+  [260] = "rogue.outlaw",
+  [261] = "rogue.subtlety",
+  [262] = "shaman.elemental",
+  [263] = "shaman.enhancement",
+  [264] = "shaman.restoration",
+  [265] = "warlock.affliction",
+  [266] = "warlock.demonology",
+  [267] = "warlock.destruction",
+  [268] = "monk.brewmaster",
+  [269] = "monk.windwalker",
+  [270] = "monk.mistweaver",
+  [577] = "demon_hunter.havoc",
+  [581] = "demon_hunter.vengeance",
+  [62] = "mage.arcane",
+  [63] = "mage.fire",
+  [64] = "mage.frost",
+  [65] = "paladin.holy",
+  [66] = "paladin.protection",
+  [70] = "paladin.retribution",
+  [71] = "warrior.arms",
+  [72] = "warrior.fury",
+  [73] = "warrior.protection",
+}
+
+--- The `Enum.CooldownViewerCategory` values the aura table was built from, so the
+--- in-client check reads the same categories the generator did.
+Symbols.auraCategories = { 2, 3, 6, 8, }
+
 --- A talent spell -> the {node, entry} pairs that grant it, FLATTENED into one list.
 --- `talent()` reads the trait config, so it needs a node; a spell that names a
 --- different node in another spec carries both, and the client arbitrates by refusing

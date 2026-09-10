@@ -128,4 +128,7 @@ loader:SetScript("OnEvent", function()
   -- The generated symbol table against the client, which is the only authority for id -> name.
   -- Silent unless a row disagrees; `/sg symbols` is the same sweep with a summary.
   ns.Names.Check()
+  -- The aura table is a cache of the CDM's tracked categories, so the client can audit it the
+  -- same way. Deferred: the viewers populate their category data after this fires.
+  C_Timer.After(5, function() ns.Names.CheckAuras() end)
 end)

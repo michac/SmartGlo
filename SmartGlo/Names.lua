@@ -225,6 +225,100 @@ function Names.Check(report)
   end)
 end
 
+--- The AURA table is a cache of the Cooldown Manager's own tracked categories, so the client
+--- can say whether it is still right -- for the CURRENT spec, which is all the client can see.
+--- Two directions matter and they fail differently: an id the table has and the categories do
+--- not is a name that will resolve and never latch; a live row no id of ours names is an aura
+--- a rule cannot ask about at all.
+---
+--- ⚠ `C_SpecializationInfo.GetSpecialization()` returns an INDEX, not a spec id.
+local function CurrentSpecKey()
+  if C_SpecializationInfo == nil then return nil end
+  local okIndex, specIndex = pcall(C_SpecializationInfo.GetSpecialization)
+  if not okIndex or type(specIndex) ~= "number" then return nil end
+  local okInfo, specID = pcall(C_SpecializationInfo.GetSpecializationInfo, specIndex)
+  if not okInfo or type(specID) ~= "number" then return nil end
+  return ns.Symbols.specIDs[specID], specID
+end
+
+--- Every spell id the live tracked categories name, row spells and linked spells alike --
+--- the same union the generator took, so the two are comparable.
+local function LiveAuraIDs()
+  if C_CooldownViewer == nil or C_CooldownViewer.GetCooldownViewerCategorySet == nil then
+    return nil, "C_CooldownViewer.GetCooldownViewerCategorySet is absent"
+  end
+  local live = {}
+  for _, category in ipairs(ns.Symbols.auraCategories) do
+    local okSet, set = pcall(C_CooldownViewer.GetCooldownViewerCategorySet, category, true)
+    if okSet and type(set) == "table" then
+      for _, cooldownID in ipairs(set) do
+        local okInfo, info = pcall(C_CooldownViewer.GetCooldownViewerCooldownInfo, cooldownID)
+        if okInfo and type(info) == "table" then
+          if type(info.spellID) == "number" then live[info.spellID] = true end
+          if type(info.overrideSpellID) == "number" then live[info.overrideSpellID] = true end
+          if type(info.linkedSpellIDs) == "table" then
+            for _, id in ipairs(info.linkedSpellIDs) do
+              if type(id) == "number" then live[id] = true end
+            end
+          end
+        end
+      end
+    end
+  end
+  return live
+end
+
+--- `report` nil runs silently and prints only on a disagreement.
+function Names.CheckAuras(report)
+  local key, specID = CurrentSpecKey()
+  if key == nil then
+    if report then
+      ns.Printf("aura table: no spec key for %s -- cannot check.", tostring(specID))
+    end
+    return
+  end
+  local live, why = LiveAuraIDs()
+  if live == nil then
+    if report then ns.Printf("aura table: %s", why) end
+    return
+  end
+  local liveCount = 0
+  for _ in pairs(live) do liveCount = liveCount + 1 end
+  if liveCount == 0 then
+    if report then
+      ns.Print("aura table: the tracked categories are empty -- the Cooldown Manager may "
+        .. "not have loaded its data yet.")
+    end
+    return
+  end
+
+  local stale, ours = {}, ns.Symbols.auraSpecs[key] or {}
+  local named = {}
+  for _, id in ipairs(ours) do
+    named[id] = true
+    if not live[id] then stale[#stale + 1] = id end
+  end
+  -- A live id the table cannot name is only worth reporting when NO id on its row is named,
+  -- and the row identity is gone by here -- so this counts ids, not rows, and is a hint.
+  local unnamed = 0
+  for id in pairs(live) do
+    if not named[id] and ns.Symbols.auraNames[id] == nil then unnamed = unnamed + 1 end
+  end
+
+  if #stale == 0 and not report then return end
+  ns.Printf("aura table for %s: %d named, %d live ids in the tracked categories.",
+    key, #ours, liveCount)
+  if #stale > 0 then
+    ns.Printf("  %d named id(s) the client does not track -- these resolve but never latch:",
+      #stale)
+    for i = 1, math.min(#stale, 10) do
+      ns.Printf("    %d (%s)", stale[i], tostring(ns.Symbols.auraNames[stale[i]]))
+    end
+  elseif report then
+    ns.Printf("  every named id is live. %d live id(s) carry no name of ours.", unnamed)
+  end
+end
+
 ns.RegisterCommand{
   name = "symbols",
   args = "[spec]",
@@ -247,5 +341,6 @@ ns.RegisterCommand{
     ns.Printf("%d spells across %d specs, from %s. Checking against the client...",
       ns.Symbols.count, ns.Symbols.specCount, ns.Symbols.source)
     Names.Check(true)
+    Names.CheckAuras(true)
   end,
 }
