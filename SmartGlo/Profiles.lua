@@ -15,19 +15,240 @@ Profiles.list = {
       {
         name = "Hand of Gul'dan at three shards",
         subject = 105174,
-        show = { t = "resource", power = "soul_shards", cmp = ">=", value = 3 },
+        when = { t = "resource", power = "soul_shards", cmp = ">=", value = 3 },
       },
-      -- ⚠ The gate is not optional here. A count draws an OCCLUDER below the threshold, so
-      -- band 0 draws, so rule-language.md §6.4's absence case applies: with the aura gone the
-      -- client hides the button, the occluder goes with it, and the mark reads as six. Wild
-      -- Imps' Cooldown Manager buff is continuously present, which is what makes this safe.
-      -- `ready()` covers a separate hazard: the occluder is a static copy of the icon drawn
-      -- above the swipe, so a mark mid-cooldown would show an unswiped patch.
+      -- `ready()` covers a hazard of its own: the occluder is a static copy of the icon drawn
+      -- above the swipe, so a mark mid-cooldown would show an unswiped patch. The absence case
+      -- is not this rule's business -- `Rules.Gate` adds the presence term on 296553 that
+      -- rule-language.md §6.4 requires, and `/sg why` prints it as its own row.
       {
         name = "Implosion at six imps",
         subject = 196277,
-        show = { t = "ready", spell = 196277 },
-        count = { aura = 296553, threshold = 6 },
+        when = { t = "ready", spell = 196277 },
+        bind = { family = "count", aura = 296553, threshold = 6 },
+      },
+    },
+  },
+
+  -- Transcribed from the simc `diabolist` list. Each glow is one APL line with the terms the
+  -- addon cannot read dropped -- so a lit icon means "this line's readable conditions hold",
+  -- never "cast this now": priority ORDER is not expressible and is not claimed.
+  --
+  -- Two subjects are OVERRIDE ids. Ruination replaces Hand of Gul'dan and Infernal Bolt
+  -- replaces Shadow Bolt while their proc is up, so each glow attaches only in the window it
+  -- is about -- which is why neither carries a gate of its own.
+  ["demonology-diabolist"] = {
+    label = "Demonology — Diabolist",
+    glows = {
+      {
+        name = "Tyrant at five shards",
+        subject = 265187,
+        when = { t = "resource", power = "soul_shards", cmp = "==", value = 5 },
+      },
+      {
+        name = "Hand of Gul'dan capped",
+        subject = 105174,
+        when = { t = "resource", power = "soul_shards", cmp = "==", value = 5 },
+      },
+      -- Dominion of Argus's window IS the Tyrant window -- "Summoning your Demonic Tyrant
+      -- leaves open a portal to Argus for 15 sec" -- so this aura is the addon's only way to
+      -- ask "is Tyrant out". The id is the row the Cooldown Manager tracks, not the talent
+      -- 1276163: the talent id names no tracked row, so a latch on it would read UNKNOWN
+      -- forever. It needs a Tracked Buffs checkbox, and `/sg why` says so when it is missing.
+      {
+        name = "Hand of Gul'dan inside the Argus window",
+        subject = 105174,
+        when = { t = "aura", spell = 1276166 },
+      },
+      {
+        name = "Demonbolt on a Core below four shards",
+        subject = 264178,
+        when = { t = "and", terms = {
+          { t = "resource", power = "soul_shards", cmp = "<", value = 4 },
+          { t = "aura", spell = 264173 },
+        } },
+      },
+      {
+        name = "Infernal Bolt below three shards",
+        subject = 433891,
+        when = { t = "resource", power = "soul_shards", cmp = "<", value = 3 },
+      },
+      {
+        name = "Implosion at six imps",
+        subject = 196277,
+        when = { t = "ready", spell = 196277 },
+        bind = { family = "count", aura = 296553, threshold = 6 },
+      },
+      {
+        name = "Ruination",
+        subject = 428522,
+        when = { t = "ready", spell = 428522 },
+      },
+      {
+        name = "Grimoire: Imp Lord",
+        subject = 1276452,
+        when = { t = "ready", spell = 1276452 },
+      },
+      {
+        name = "Grimoire: Fel Ravager",
+        subject = 1276467,
+        when = { t = "ready", spell = 1276467 },
+      },
+      {
+        name = "Summon Doomguard",
+        subject = 1276672,
+        when = { t = "ready", spell = 1276672 },
+      },
+      -- Reign of Tyranny banks imps for the Tyrant instead, so the APL only sends
+      -- Dreadstalkers on demand when it is NOT taken.
+      {
+        name = "Call Dreadstalkers without Reign of Tyranny",
+        subject = 104316,
+        when = { t = "and", terms = {
+          { t = "not", term = { t = "talent", spell = 1276748 } },
+          { t = "ready", spell = 104316 },
+        } },
+      },
+    },
+  },
+  -- Transcribed from the simc `retribution` list. Each glow is one APL line with the terms
+  -- the addon cannot read dropped -- so a lit icon means "this line's readable conditions
+  -- hold", never "cast this now": priority ORDER is not expressible and is not claimed.
+  --
+  -- Hammer of Light and its `hammer_of_light_ready` gates are absent on purpose: they come
+  -- from Light's Deliverance, a TEMPLAR talent, which this tree does not have.
+  ["retribution-herald"] = {
+    label = "Retribution — Herald of the Sun",
+    glows = {
+      {
+        name = "Wake of Ashes",
+        subject = 255937,
+        when = { t = "ready", spell = 255937 },
+      },
+      {
+        name = "Divine Toll",
+        subject = 375576,
+        when = { t = "ready", spell = 375576 },
+      },
+      {
+        name = "Avenging Wrath",
+        subject = 31884,
+        when = { t = "ready", spell = 31884 },
+      },
+      {
+        name = "Execution Sentence into Wake of Ashes",
+        subject = 343527,
+        when = { t = "and", terms = {
+          { t = "ready", spell = 343527 },
+          { t = "ready", spell = 255937 }
+        } },
+      },
+      {
+        name = "Templar's Verdict at cap",
+        subject = 85256,
+        when = { t = "and", terms = {
+          { t = "resource", power = "holy_power", cmp = "==", value = 5 },
+          { t = "not", term = { t = "ready", spell = 255937 } }
+        } },
+      },
+      {
+        name = "Divine Storm on Empyrean Power",
+        subject = 53385,
+        when = { t = "aura", spell = 326732 },
+      },
+      {
+        name = "Blade of Justice on a proc",
+        subject = 184575,
+        when = { t = "or", terms = {
+          { t = "aura", spell = 406064 },
+          { t = "aura", spell = 402912 }
+        } },
+      },
+      {
+        name = "Blade of Justice held under Walk Into Light",
+        subject = 184575,
+        when = { t = "and", terms = {
+          { t = "talent", spell = 1263782 },
+          { t = "aura", spell = 31884 }
+        } },
+      },
+    },
+  },
+
+  -- From the simc `protection` list and Method's 12.1 priority. Same contract as above: a
+  -- lit icon is a rung whose readable conditions hold, not an instruction.
+  --
+  -- No count bind here, though `consecration,if=buff.divine_guidance.stack>=5` is the right
+  -- shape for one and `Rules.Gate` now covers the absence case that ruled it out. It is left
+  -- out because it is a rotation call, not because it cannot be expressed.
+  ["protection-lightsmith"] = {
+    label = "Protection — Lightsmith",
+    glows = {
+      {
+        name = "Word of Glory on Shining Light",
+        subject = 85673,
+        when = { t = "aura", spell = 321136 },
+      },
+      -- The paid cast, for when you are actually hurt rather than when it is free. Health can
+      -- only ever be a BIND: `UnitHealth` is unconditionally secret, so no gate can compare it
+      -- and the threshold goes to the client as a curve. The readable half carries the part
+      -- that can be read -- 3 Holy Power is the cost, so this is "castable".
+      {
+        name = "Word of Glory when hurt",
+        subject = 85673,
+        when = { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
+        bind = { cmp = "<", family = "health", percent = 80 },
+      },
+      {
+        name = "Holy Armaments",
+        subject = 432459,
+        when = { t = "ready", spell = 432459 },
+      },
+      {
+        name = "Avenger's Shield on Glory of the Vanguard",
+        subject = 31935,
+        when = { t = "aura", spell = 1267203 },
+      },
+      {
+        name = "Avenging Wrath with Divine Toll up",
+        subject = 31884,
+        when = { t = "and", terms = {
+          { t = "ready", spell = 31884 },
+          { t = "ready", spell = 375576 }
+        } },
+      },
+      {
+        name = "Divine Toll inside Avenging Wrath",
+        subject = 375576,
+        when = { t = "and", terms = {
+          { t = "ready", spell = 375576 },
+          { t = "aura", spell = 31884 }
+        } },
+      },
+      {
+        name = "Consecration when you are not in it",
+        subject = 26573,
+        when = { t = "and", terms = {
+          { t = "ready", spell = 26573 },
+          { t = "not", term = { t = "aura", spell = 188370 } }
+        } },
+      },
+      -- Two rungs on the same button, and the second is the first with its requirement
+      -- lowered. At the cap you press regardless, because the next generator overcaps; with
+      -- the mitigation buff down it is worth pressing at the castable minimum instead. `>= 5`
+      -- rather than `== 5` so a talent that raises the cap cannot step over it.
+      {
+        name = "Shield of the Righteous at cap",
+        subject = 53600,
+        when = { t = "resource", power = "holy_power", cmp = ">=", value = 5 },
+      },
+      {
+        name = "Shield of the Righteous with the buff down",
+        subject = 53600,
+        when = { t = "and", terms = {
+          { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
+          { t = "not", term = { t = "aura", spell = 132403 } }
+        } },
       },
     },
   },

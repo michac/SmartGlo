@@ -2,7 +2,9 @@
 
 local ADDON, ns = ...
 
-ns.addonName = ADDON
+--- A capture session names the build it was taken on, so `ns.version` is read, not derived.
+ns.version = (C_AddOns and C_AddOns.GetAddOnMetadata
+  and C_AddOns.GetAddOnMetadata(ADDON, "Version")) or "?"
 
 local PREFIX = "|cff00ccffSmartGlo|r: "
 
@@ -88,13 +90,42 @@ ns.RegisterCommand{
   handler = Help,
 }
 
+--- The one stream. Every edge case Smart Glo has is SILENT -- the glow simply does not
+--- appear -- so the log is the only instrument that says which one happened. Six sessions
+--- because a `/reload` burns one and the interesting pull is usually two back.
+---
+--- ⚠ No game value reaches a line except through `ns.Capture.Safe`, and the duration
+--- ticker never writes: only edges do, or the ring fills in under a minute.
+ns.log = ns.Capture.Open("attach", { sessions = 6, cap = 600, dedup = true })
+
+local combat = CreateFrame("Frame")
+combat:RegisterEvent("PLAYER_REGEN_DISABLED")
+combat:RegisterEvent("PLAYER_REGEN_ENABLED")
+combat:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+combat:SetScript("OnEvent", function(_, event)
+  if event == "PLAYER_SPECIALIZATION_CHANGED" then
+    local spec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization()
+    ns.log:Mark("spec change -> %s", ns.Capture.Safe(spec))
+    ns.log:Meta("spec", spec)
+    return
+  end
+  ns.log:Mark(event == "PLAYER_REGEN_DISABLED" and "combat enter" or "combat exit")
+end)
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function()
   SLASH_SMARTGLO1 = "/sg"
   SlashCmdList.SMARTGLO = Dispatch
   ns.Store.Load()
+  -- Before the attach path asks, and while we are as close to certainly out of combat as a
+  -- login gets. `PLAYER_REGEN_ENABLED` repairs it if this one landed inside a fight.
+  ns.Rules.PrimeTalents()
   ns.Attach.Start()
   ns.Count.Start()
   ns.Print("loaded -- /sg help")
+  ns.log:Mark("login -- SmartGlo %s", ns.Capture.Safe(ns.version))
+  -- The generated symbol table against the client, which is the only authority for id -> name.
+  -- Silent unless a row disagrees; `/sg symbols` is the same sweep with a summary.
+  ns.Names.Check()
 end)

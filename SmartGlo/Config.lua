@@ -4,7 +4,6 @@
 local _, ns = ...
 
 local Config = {}
-ns.Config = Config
 
 local WIDTH, HEIGHT = 480, 380
 local dialog
@@ -37,12 +36,27 @@ local function Subjects()
   return out
 end
 
+--- The box shows RULE TEXT, not a wire string, because the box is the only place a rule can
+--- be written by hand. A wire string pasted in still applies -- `Read` takes either.
 local function RulesText(subject)
   local glows = ns.Store.ForSubject(subject)
   if #glows == 0 then return "" end
-  local wire, err = ns.Wire.Encode(glows)
-  if wire == nil then return "-- could not encode: " .. tostring(err) end
-  return wire
+  return ns.Parse.Render(glows)
+end
+
+--- One door for whatever is in the box. `SG1:` is the wire prefix and nothing else may start
+--- with it, so the sniff is exact rather than a guess about the content.
+local function Read(text)
+  local glows, why
+  if string.match(text or "", "^%s*SG1:") then
+    glows, why = ns.Wire.Decode((string.match(text, "^%s*(.-)%s*$")))
+  else
+    glows, why = ns.Parse.Text(text)
+  end
+  -- The refusal STRING is the payload: the same input refused differently here and by
+  -- `wowkb.smartglo` is the two grammars having drifted, and there is no other detector.
+  if glows == nil then ns.log:Mark("refused: %s", ns.Capture.Safe(why)) end
+  return glows, why
 end
 
 local function Detail(subject)
@@ -56,14 +70,14 @@ local function Detail(subject)
   end
   local lines = { ns.SpellLabel(subject), "" }
   for _, glow in ipairs(glows) do
-    local verdict = ns.Rules.Evaluate(glow.show)
+    local verdict = ns.Rules.Evaluate(ns.Rules.Gate(glow))
     lines[#lines + 1] = ("[%s] %s"):format(verdict, glow.name or "(unnamed)")
-    if glow.show ~= nil then
-      lines[#lines + 1] = "      show   " .. ns.Rules.Describe(glow.show)
+    if glow.when ~= nil then
+      lines[#lines + 1] = "      when   " .. ns.Rules.Describe(glow.when)
     end
-    if glow.count ~= nil then
-      lines[#lines + 1] = ("      count  aura %d >= %d -- %s"):format(
-        glow.count.aura, glow.count.threshold, ns.Count.Describe(subject))
+    if glow.bind ~= nil then
+      lines[#lines + 1] = ("      bind   %s -- %s"):format(
+        ns.Rules.DescribeBind(glow.bind), ns.Count.Describe(subject))
     end
   end
   return table.concat(lines, "\n")
@@ -84,7 +98,7 @@ end
 local function Apply()
   local text = dialog.edit:GetText()
   if selected == nil then
-    local glows, err = ns.Wire.Decode(text)
+    local glows, err = Read(text)
     if glows == nil then
       dialog.status:SetText("|cffff6060" .. tostring(err) .. "|r")
       return
@@ -108,7 +122,7 @@ local function Apply()
     Refresh()
     return
   end
-  local glows, err = ns.Wire.Decode(text)
+  local glows, err = Read(text)
   if glows == nil then
     dialog.status:SetText("|cffff6060" .. tostring(err) .. "|r")
     return
@@ -228,23 +242,34 @@ ns.RegisterCommand{
 
 ns.RegisterCommand{
   name = "export",
-  desc = "print every applied rule as one paste-able string",
-  handler = function()
+  args = "[text]",
+  desc = "print every applied rule -- as a share string, or as rule text",
+  handler = function(rest)
     local all = ns.Store.All()
     if #all == 0 then
       ns.Print("no rules applied, so there is nothing to export.")
       return
     end
-    local wire, err = ns.Wire.Encode(all)
-    if wire == nil then
-      ns.Printf("could not encode: %s", tostring(err))
-      return
+    local plain = string.match(rest or "", "^%s*text%s*$") ~= nil
+    local body, blurb
+    if plain then
+      body = ns.Parse.Render(all)
+      blurb = "Every applied rule, as text. Edit it and press Apply, or Ctrl+C to copy."
+    else
+      local err
+      body, err = ns.Wire.Encode(all)
+      if body == nil then
+        ns.Printf("could not encode: %s", tostring(err))
+        return
+      end
+      blurb = "Every applied rule, as one share string. Ctrl+C to copy. "
+        .. "`/sg export text` gives the editable form."
     end
     if dialog == nil then dialog = Build() end
     dialog:Show()
     selected = nil
-    dialog.detail:SetText("Every applied rule, as one string. Ctrl+C to copy.")
-    dialog.edit:SetText(wire)
+    dialog.detail:SetText(blurb)
+    dialog.edit:SetText(body)
     dialog.edit:SetFocus()
     dialog.edit:HighlightText()
     dialog.status:SetText("Selected -- Ctrl+C to copy.")
@@ -258,7 +283,7 @@ ns.RegisterCommand{
     if dialog == nil then dialog = Build() end
     dialog:Show()
     selected = nil
-    dialog.detail:SetText("Paste a whole rule set, then press Apply.")
+    dialog.detail:SetText("Paste a whole rule set -- rule text or an SG1: string -- then press Apply.")
     dialog.edit:SetText("")
     dialog.edit:SetFocus()
     dialog.status:SetText("")

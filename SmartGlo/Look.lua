@@ -57,8 +57,6 @@ local PALETTE = {
   cyan = { 0.37, 0.92, 0.91 },
 }
 
-Look.PALETTE = PALETTE
-
 function Look.IsColor(name)
   return PALETTE[name] ~= nil
 end

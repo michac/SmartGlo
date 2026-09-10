@@ -1,11 +1,15 @@
--- The rule AST: the term catalogue, the checker's refusals, and three-valued evaluation.
+-- The rule AST: the two bowls, the checker's refusals, and three-valued evaluation.
+--
+-- `when` is the readable bowl and takes as many terms as you like. `bind` is the sealed bowl
+-- and holds AT MOST ONE leaf, which is why it is a slot and not a list: at-most-one is then
+-- structural rather than something the checker has to remember to say.
 
 local _, ns = ...
 
 local Rules = {}
 ns.Rules = Rules
 
---- Secondary resources are never secret, so a threshold on one is a gate at any value.
+--- Secondary resources are never secret, so a threshold on one is readable at any value.
 local SECONDARY = {
   soul_shards = "SoulShards",
   holy_power = "HolyPower",
@@ -30,14 +34,34 @@ local CMP = {
   ["=="] = function(a, b) return a == b end,
 }
 
-Rules.SECONDARY = SECONDARY
-Rules.PRIMARY = PRIMARY
+--- The bowl catalogue: a term named on the wrong side is refused BY NAME in both directions,
+--- which is what makes the sorting enforced rather than remembered.
+local SEALED_FAMILY = { count = true, duration = true }
+local READABLE_TERM = { resource = true, ready = true, aura = true, talent = true }
+
+--- `<` and `outside` on a cooldown are also true at zero remaining, and zero remaining means
+--- the spell is READY -- so such a bind glows permanently while its subject is up unless the
+--- author says otherwise. Bright is worse than dark.
+local UNBOUNDED_BELOW = { ["<"] = true, ["<="] = true, outside = true }
 
 function Rules.PowerType(name)
   local key = SECONDARY[name]
   if key == nil then return nil end
   if type(Enum) ~= "table" or type(Enum.PowerType) ~= "table" then return nil end
   return Enum.PowerType[key]
+end
+
+--- A rule written before the two bowls: `show` is `when`, and a `count` element is the count
+--- family of `bind`. Old wire strings and old SavedVariables still load.
+function Rules.Modernize(glow)
+  if type(glow) ~= "table" then return glow end
+  if glow.when == nil and glow.show ~= nil then glow.when = glow.show end
+  glow.show = nil
+  if glow.bind == nil and type(glow.count) == "table" then
+    glow.bind = { family = "count", aura = glow.count.aura, threshold = glow.count.threshold }
+  end
+  glow.count = nil
+  return glow
 end
 
 -- ---------------------------------------------------------------- the checker
@@ -72,7 +96,8 @@ function Check(term, errs, depth)
     Check(term.term, errs, depth + 1)
   elseif term.t == "resource" then
     if PRIMARY[term.power] then
-      table.insert(errs, ("%s is a primary resource and can never be a gate"):format(term.power))
+      table.insert(errs, ("%s is a primary resource, which is never readable -- it belongs "
+        .. "in `bind` as a percent, not in `when`"):format(term.power))
     elseif SECONDARY[term.power] == nil then
       table.insert(errs, ("unknown resource %q"):format(tostring(term.power)))
     end
@@ -82,20 +107,77 @@ function Check(term, errs, depth)
     if type(term.value) ~= "number" then
       table.insert(errs, "a resource threshold needs a number")
     end
-  elseif term.t == "ready" then
+  elseif term.t == "ready" or term.t == "aura" or term.t == "talent" then
     if type(term.spell) ~= "number" then
-      table.insert(errs, "ready() needs a spell id")
-    end
-  elseif term.t == "aura" then
-    if type(term.spell) ~= "number" then
-      table.insert(errs, "aura() needs a spell id")
+      table.insert(errs, term.t .. "() needs a spell id")
     end
   elseif term.t == "charges" then
-    table.insert(errs, "a charge COUNT is neither a gate nor a binding; use ready() instead")
-  elseif term.t == "count" then
-    table.insert(errs, "a count is a sealed binding and cannot appear inside an expression")
+    table.insert(errs, "a charge COUNT is neither readable nor sealed; use ready() instead")
+  elseif SEALED_FAMILY[term.t] then
+    table.insert(errs, ("%s is a sealed term and belongs in `bind`, not in `when`"):format(term.t))
   else
     table.insert(errs, ("unknown term %q"):format(term.t))
+  end
+end
+
+--- Is `not ready(<spell>)` in the readable half? Only a conjunction counts -- a disjunct
+--- leaves a path where the guard is false and the bind still drives the widget.
+local function GuardsReady(node, spell)
+  if type(node) ~= "table" then return false end
+  if node.t == "and" then
+    for _, sub in ipairs(node.terms or {}) do
+      if GuardsReady(sub, spell) then return true end
+    end
+    return false
+  end
+  if node.t == "not" then
+    local inner = node.term
+    return type(inner) == "table" and inner.t == "ready" and inner.spell == spell
+  end
+  return false
+end
+
+local function CheckBind(bind, when, errs)
+  if type(bind) ~= "table" then
+    table.insert(errs, "a bind must be a table")
+    return
+  end
+  if bind.family == "count" then
+    if type(bind.aura) ~= "number" then
+      table.insert(errs, "a count bind needs a numeric aura id")
+    end
+    if type(bind.threshold) ~= "number" then
+      table.insert(errs, "a count bind needs a numeric threshold")
+    end
+  elseif bind.family == "duration" then
+    if type(bind.spell) ~= "number" then
+      table.insert(errs, "a duration bind needs a spell id")
+    end
+    if bind.cmp == "outside" then
+      if type(bind.lo) ~= "number" or type(bind.hi) ~= "number" or bind.hi <= bind.lo then
+        table.insert(errs, "`outside` needs two rising bounds")
+      end
+    elseif CMP[bind.cmp] == nil or bind.cmp == "==" then
+      table.insert(errs, ("unknown duration comparison %q"):format(tostring(bind.cmp)))
+    elseif type(bind.seconds) ~= "number" then
+      table.insert(errs, "a duration bind needs a number of seconds")
+    end
+    if UNBOUNDED_BELOW[bind.cmp] and bind.absent == nil
+        and not GuardsReady(when, bind.spell) then
+      table.insert(errs, ("`%s` on a cooldown is also true when the spell is READY, so this "
+        .. "would glow permanently while it is up. Add `not ready(...)` to `when`, or set "
+        .. "`absent` to \"dark\" or \"show\" on the bind"):format(tostring(bind.cmp)))
+    end
+  elseif bind.family == "health" then
+    if CMP[bind.cmp] == nil or bind.cmp == "==" then
+      table.insert(errs, ("unknown health comparison %q"):format(tostring(bind.cmp)))
+    elseif type(bind.percent) ~= "number" or bind.percent <= 0 or bind.percent >= 100 then
+      table.insert(errs, "a health bind needs a percent strictly between 0 and 100")
+    end
+  elseif READABLE_TERM[bind.family] then
+    table.insert(errs, ("%s is readable and belongs in `when`, not in `bind`"):format(bind.family))
+  else
+    table.insert(errs, ("unknown bind family %q"):format(tostring(bind.family)))
   end
 end
 
@@ -108,23 +190,18 @@ function Rules.CheckGlow(glow)
   if type(glow.subject) ~= "number" then
     table.insert(errs, "a glow needs a numeric subject spell id")
   end
-  if glow.show ~= nil then
-    Check(glow.show, errs, 0)
+  if glow.when ~= nil then
+    Check(glow.when, errs, 0)
   end
-  if glow.count ~= nil then
-    if type(glow.count.aura) ~= "number" then
-      table.insert(errs, "a count element needs a numeric aura id")
-    end
-    if type(glow.count.threshold) ~= "number" then
-      table.insert(errs, "a count element needs a numeric threshold")
-    end
+  if glow.bind ~= nil then
+    CheckBind(glow.bind, glow.when, errs)
   end
   if glow.color ~= nil and not ns.Look.IsColor(glow.color) then
     table.insert(errs, ("unknown colour %q; known: %s"):format(tostring(glow.color),
       table.concat(ns.Look.Names(), ", ")))
   end
-  if glow.show == nil and glow.count == nil then
-    table.insert(errs, "a glow needs a `show` expression, a `count` element, or both")
+  if glow.when == nil and glow.bind == nil then
+    table.insert(errs, "a glow needs a `when` expression, a `bind`, or both")
   end
   if #errs > 0 then return nil, errs end
   return glow
@@ -143,6 +220,12 @@ local function Best(a, b)
   if a == ns.T or b == ns.T then return ns.T end
   if a == ns.UNKNOWN or b == ns.UNKNOWN then return ns.UNKNOWN end
   return ns.F
+end
+
+--- The name a rule would write for a spell, and the id when nothing names it. `Symbols.lua`
+--- carries the KB's inventory; an override id is in no inventory and prints as a number.
+function Rules.Label(spellID)
+  return ns.Names.Of(spellID) or tostring(spellID)
 end
 
 local Eval
@@ -184,7 +267,7 @@ local function EvalReady(term, trace)
   end
   local verdict = ns.F
   if not active and enabled ~= false then verdict = ns.T end
-  trace[#trace + 1] = { text = "ready(" .. term.spell .. ")", verdict = verdict }
+  trace[#trace + 1] = { text = "ready(" .. Rules.Label(term.spell) .. ")", verdict = verdict }
   return verdict
 end
 
@@ -192,13 +275,152 @@ end
 --- is UNKNOWN rather than absent (cooldown-manager.md §5.1).
 local function EvalAura(term, trace)
   local verdict = ns.Attach.AuraLatch(term.spell)
-  local label = "aura(" .. term.spell .. ")"
+  local label = "aura(" .. Rules.Label(term.spell) .. ")"
   if verdict == ns.UNKNOWN then
     label = label .. ": no Cooldown Manager row is bound to it"
   end
   trace[#trace + 1] = { text = label, verdict = verdict }
   return verdict
 end
+
+-- ------------------------------------------------------------------ talent()
+--
+-- A talent is a static load condition, so it is an ordinary readable gate -- but it is read
+-- off the TRAIT CONFIG, never off the spell book. `C_SpellBook.IsSpellKnown` answers about a
+-- spell rather than about a node: it stands in for the talent instead of being it, and a
+-- proxy that diverges does so silently. The rule keys off what the APL keys off.
+
+--- Is one node purchased, and is the declared entry the selected one?
+---
+--- Three values, and the third is the point. `true` = purchased AND the entry matches.
+--- `false` = genuinely not taken. `nil` = the read refused or answered in a shape we do not
+--- recognise, which is NOT "not taken" -- and under a `not` a wrong `false` reads as a
+--- confident true, which is the failure this whole shape exists to prevent.
+local function NodeSelected(info, entryID)
+  if type(info) ~= "table" then return nil end
+  local ranks = info.ranksPurchased
+  if ns.IsSecret(ranks) or type(ranks) ~= "number" then return nil end
+  if ranks <= 0 then return false end
+  -- Entry 0 means the generated table could not say which half of a choice node this is, so
+  -- ranks alone decide rather than an entry check that would compare against nothing.
+  if entryID == 0 then return true end
+  local active = info.activeEntry
+  if type(active) ~= "table" then return nil end
+  local id = active.entryID
+  if ns.IsSecret(id) or type(id) ~= "number" then return nil end
+  return id == entryID
+end
+
+--- A talent cannot change during a fight and a spec cannot either, so a value read before
+--- the pull stays true through it: every moment the answer can CHANGE is a moment we are out
+--- of combat, and each of those is a prime point. In combat the cache is served.
+--- The one way in is a `/reload` mid-pull, which starts the addon with nothing primed. That
+--- costs the rest of that pull -- the gate reads UNKNOWN and the glow stays dark -- and
+--- leaving combat repairs it.
+local talentCache, talentConfig = {}, nil
+
+local function ActiveConfig()
+  if type(C_ClassTalents) ~= "table" or type(C_ClassTalents.GetActiveConfigID) ~= "function"
+      or type(C_Traits) ~= "table" or type(C_Traits.GetNodeInfo) ~= "function" then
+    return nil
+  end
+  local ok, configID = pcall(C_ClassTalents.GetActiveConfigID)
+  if not ok or type(configID) ~= "number" then return nil end
+  return configID
+end
+
+--- ⚠ `C_Traits.GetNodeInfo` is UNMEASURED -- `knowledge/addon-dev/` records neither its shape
+--- nor whether `ranksPurchased` / `activeEntry` survive combat restriction. Nothing here
+--- asserts that they do: every read is pcall'ed and every unrecognised answer becomes UNKNOWN,
+--- so an unmeasured read that refuses costs a glow and can never invent one.
+---
+--- A spell may name a different node in another spec, so the table carries every candidate.
+--- The node that is not in the player's own tree refuses, which is the client arbitrating
+--- rather than the table guessing.
+local function ReadTalent(spellID)
+  local configID = ActiveConfig()
+  if configID == nil then return nil, "the trait config is unreadable" end
+  if talentConfig ~= configID then
+    talentCache, talentConfig = {}, configID
+  end
+  local hit = talentCache[spellID]
+  if hit ~= nil then return hit.value, hit.why end
+  -- A miss in combat is the priming having failed, not a value that moved. Read anyway --
+  -- it can only improve on UNKNOWN -- but do not CACHE a combat answer, so the next
+  -- out-of-combat prime is what fills the slot.
+  local cache = not InCombatLockdown()
+
+  local pairs_ = ns.Symbols.talentNodes[spellID]
+  if pairs_ == nil then
+    talentCache[spellID] = { why = "no talent node grants it" }
+    return nil, "no talent node grants it"
+  end
+  for i = 1, #pairs_, 2 do
+    local ok, info = pcall(C_Traits.GetNodeInfo, configID, pairs_[i])
+    if ok then
+      local selected = NodeSelected(info, pairs_[i + 1])
+      if selected ~= nil then
+        if cache then talentCache[spellID] = { value = selected } end
+        return selected
+      end
+    end
+  end
+  local why = cache and "no candidate node answered"
+    or "not read before combat, and a talent is not re-read during one"
+  if cache then talentCache[spellID] = { why = why } end
+  return nil, why
+end
+
+local function EvalTalent(term, trace)
+  local selected, why = ReadTalent(term.spell)
+  if selected == nil then
+    trace[#trace + 1] = { verdict = ns.UNKNOWN,
+      text = ("talent(%s): %s"):format(Rules.Label(term.spell), why) }
+    return ns.UNKNOWN
+  end
+  local verdict = selected and ns.T or ns.F
+  trace[#trace + 1] = {
+    text = ("talent(%s) by the trait config"):format(Rules.Label(term.spell)),
+    verdict = verdict,
+  }
+  return verdict
+end
+
+--- Read every talent the applied rules name, now, while we are certainly out of combat.
+--- Called on each of the three edges below and once the store has loaded.
+function Rules.PrimeTalents()
+  talentCache, talentConfig = {}, nil
+  if ns.Store == nil then return end
+  for _, glow in ipairs(ns.Store.All()) do
+    local stack = { glow.when }
+    while #stack > 0 do
+      local term = table.remove(stack)
+      if type(term) == "table" then
+        if term.t == "talent" then ReadTalent(term.spell) end
+        for _, sub in ipairs(term.terms or {}) do stack[#stack + 1] = sub end
+        if term.term ~= nil then stack[#stack + 1] = term.term end
+      end
+    end
+  end
+end
+
+--- ⚠ Frame dispatch order for one event is observably variable, so priming cannot rely on
+--- running before the attach path's own handler for the same event. It announces itself
+--- instead: a verdict that was UNKNOWN through the fight becomes readable the moment the
+--- prime lands, and nothing else would have asked again.
+function Rules.PrimedEvaluate()
+  Rules.PrimeTalents()
+  if ns.Attach ~= nil then ns.Attach.Evaluate() end
+end
+
+--- The three edges where the answer can move, and all three are out of combat by definition:
+--- a config commit and a spec swap are both barred during a fight, and leaving one is the
+--- unambiguous moment to repair a prime that could not happen at login.
+local traitWatch = CreateFrame("Frame")
+traitWatch:RegisterEvent("TRAIT_CONFIG_UPDATED")
+traitWatch:RegisterEvent("PLAYER_SPECIALIZATION_CHANGED")
+traitWatch:RegisterEvent("PLAYER_REGEN_ENABLED")
+traitWatch:SetScript("OnEvent", Rules.PrimedEvaluate)
 
 function Eval(term, trace)
   if term.t == "and" then
@@ -220,12 +442,37 @@ function Eval(term, trace)
     return EvalReady(term, trace)
   elseif term.t == "aura" then
     return EvalAura(term, trace)
+  elseif term.t == "talent" then
+    return EvalTalent(term, trace)
   end
   trace[#trace + 1] = { text = "unknown term " .. tostring(term.t), verdict = ns.UNKNOWN }
   return ns.UNKNOWN
 end
 
 --- Evaluates every term: no short-circuit, because `/sg why` needs all of them.
+--- The expression a glow is actually evaluated on: its `when`, plus -- for a count -- an
+--- implicit presence term on the aura the occluder rides.
+---
+--- A count's band 0 DRAWS, so the client hiding the button takes the occluder away and the
+--- mark reads as though the threshold were met (rule-language.md 6.4). Absence is the one
+--- case the sealed half gets wrong in the bright direction, and the readable half is where it
+--- can be caught: this term reads F when the aura is gone and UNKNOWN when nothing can say,
+--- and either one closes the element's alpha over the occluder and the mark together.
+---
+--- It is built here rather than folded into `when` at decode so the authored rule stays the
+--- rule -- `/sg export` and the checker still see what the author wrote, and the term shows up
+--- in `/sg why` as the extra row it is.
+function Rules.Gate(glow)
+  if glow == nil then return nil end
+  local bind = glow.bind
+  if type(bind) ~= "table" or bind.family ~= "count" or type(bind.aura) ~= "number" then
+    return glow.when
+  end
+  local present = { t = "aura", spell = bind.aura }
+  if glow.when == nil then return present end
+  return { t = "and", terms = { glow.when, present } }
+end
+
 function Rules.Evaluate(expr)
   local trace = {}
   if expr == nil then return ns.T, trace end
@@ -237,6 +484,10 @@ local TRIGGERS = {
   resource = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" },
   ready = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_USABLE", "SPELL_UPDATE_CHARGES" },
   aura = {},
+  -- ⚠ NOT the events that make a talent readable -- those are handled by the prime above,
+  -- out of combat. These are here so a glow carrying a talent term still re-evaluates when
+  -- the trigger union is what drives the attach path.
+  talent = { "TRAIT_CONFIG_UPDATED", "PLAYER_SPECIALIZATION_CHANGED", "PLAYER_REGEN_ENABLED" },
 }
 
 function Rules.Triggers(expr, into)
@@ -262,12 +513,31 @@ local function Describe(expr)
     return "not " .. Describe(expr.term)
   elseif expr.t == "resource" then
     return ("%s %s %s"):format(expr.power, expr.cmp, tostring(expr.value))
-  elseif expr.t == "ready" then
-    return "ready(" .. tostring(expr.spell) .. ")"
-  elseif expr.t == "aura" then
-    return "aura(" .. tostring(expr.spell) .. ")"
+  elseif expr.t == "ready" or expr.t == "aura" or expr.t == "talent" then
+    return expr.t .. "(" .. Rules.Label(expr.spell) .. ")"
   end
   return tostring(expr.t)
 end
 
 Rules.Describe = Describe
+
+function Rules.DescribeBind(bind)
+  if type(bind) ~= "table" then return "?" end
+  if bind.family == "count" then
+    return ("%s.stacks >= %s"):format(Rules.Label(bind.aura), tostring(bind.threshold))
+  end
+  if bind.family == "health" then
+    return ("health%% %s %s"):format(bind.cmp, bind.percent)
+  end
+  if bind.family == "duration" then
+    local body
+    if bind.cmp == "outside" then
+      body = ("%s.cooldown outside %ss..%ss"):format(Rules.Label(bind.spell), bind.lo, bind.hi)
+    else
+      body = ("%s.cooldown %s %ss"):format(Rules.Label(bind.spell), bind.cmp, bind.seconds)
+    end
+    if bind.absent then body = body .. " absent " .. bind.absent end
+    return body
+  end
+  return tostring(bind.family)
+end

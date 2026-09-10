@@ -21,12 +21,20 @@ stds.wow = {
     "issecretvalue",
     "C_Spell",
 
-    -- Rules.lua — the readable vocabulary: secondary resources and the cooldown info table.
+    -- Rules.lua — the readable vocabulary: secondary resources, the cooldown info table,
+    -- and the trait config, which is how `talent()` asks whether a node is purchased.
     "UnitPower",
+    "UnitHealthPercent",
     "Enum",
+    "C_Traits",
+    "C_ClassTalents",
+    "InCombatLockdown",
 
     -- Look.lua — the shipped escape builder, so no format string is hand-rolled here.
     "CreateTextureMarkup",
+
+    -- Core.lua — the session stamps the capture log carries: which spec it was taken on.
+    "C_SpecializationInfo",
 
     -- Overlay.lua / Config.lua — our own frames hang off the screen, never off a CDM icon.
     "UIParent",
@@ -37,9 +45,17 @@ stds.wow = {
     "C_CooldownViewer",
     "EventRegistry",
 
+    -- Capture.lua — the readability classes and the session timestamp.
+    "issecrettable",
+    "date",
+
     -- Count.lua — the managed aura container and the authored numeric formatter.
     "C_AddOns",
     "C_StringUtil",
+
+    -- Duration.lua — the engine-curve read: a decision taken against a secret magnitude
+    -- without ever reading it.
+    "C_CurveUtil",
 
     -- Wire.lua — serialize, compress and base64, all three shipped by the client.
     "C_EncodingUtil",
@@ -58,3 +74,8 @@ stds.wow = {
     "SmartGloDB",
   },
 }
+
+-- Capture.lua is vendored verbatim and opens `local ADDON, ns = ...`, WoW's
+-- (addonName, addonTable) vararg. It uses only `ns`, so `ADDON` reads dead — but renaming a
+-- vendored file's locals is how a diff against the other copies stops showing divergence.
+ignore = { "211/ADDON" }

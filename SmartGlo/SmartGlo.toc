@@ -5,15 +5,21 @@
 ## Version: 0.3.9
 ## SavedVariables: SmartGloDB
 
+Capture.lua
 Core.lua
+Symbols.lua
+Names.lua
 Look.lua
 Rules.lua
+Parse.lua
 Wire.lua
 Profiles.lua
 Store.lua
 Overlay.lua
 Attach.lua
 Count.lua
+Duration.lua
+Health.lua
 Config.lua
 
 # --- probes (delete on close) ---

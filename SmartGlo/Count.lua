@@ -17,7 +17,6 @@ ns.Count = Count
 local containers = {}
 local failed = {}
 local wanted = {}
-local keyFor = {}
 local state = {}
 local pending = {}
 
@@ -25,11 +24,22 @@ local pending = {}
 --- is fixed at the moment it is handed over -- so both belong in the key. A rebind to another
 --- spell, or a move of the icon-size slider, is a NEW container rather than a re-armed sink.
 local function KeyOf(glow, icon, size)
-  return ("%d:%d:%d:%d:%d"):format(glow.subject, glow.count.aura, glow.count.threshold,
+  return ("%d:%d:%d:%d:%d"):format(glow.subject, glow.bind.aura, glow.bind.threshold,
     icon, size)
 end
 
+--- The count family is one of two sealed families, and only this one is a container.
+function Count.Owns(glow)
+  return type(glow.bind) == "table" and glow.bind.family == "count"
+end
+
+--- Every arm outcome, success and each distinct failure, passes through here -- so this is
+--- the one place the log has to watch. A container that fails to arm is left failed until
+--- `/sg rearm`, which is exactly the silence the mark exists to break.
 local function Note(key, text)
+  if state[key] ~= text then
+    ns.log:Mark("count %s: %s", ns.Capture.Safe(key), ns.Capture.Safe(text))
+  end
   state[key] = text
 end
 
@@ -37,9 +47,11 @@ end
 --- (`{{0,"%d"},{2,""}}` is the measured shape, §3.5.2).
 ---
 --- ⚠ Band 0 draws, so this is rule-language.md §6.4's absence case: the client hides the
---- button whenever the aura is gone, no button means no occluder, and the mark then reads as
---- though the threshold were met. It is only correct for an aura that is CONTINUOUSLY
---- PRESENT. Do not point a count element at one that drops.
+--- button whenever the aura is gone, no button means no occluder, and the mark alone would
+--- read as though the threshold were met. Nothing in this file can see that -- the sealed half
+--- never learns the aura went away. `Rules.Gate` is what covers it, adding a presence term on
+--- this same aura to the readable half, which closes the element's alpha over the occluder and
+--- the mark together. An aura that drops is safe BECAUSE of that gate, not on its own.
 local function Bands(threshold, entry)
   local escape = ns.Look.IconEscape(entry.icon, entry.width)
   return {
@@ -65,7 +77,7 @@ end
 --- One slot, one button, one FontString, one formatter, armed ONCE here and never re-armed.
 local function Arm(entry, key)
   local glow = entry.glow
-  local host = ns.Overlay.For(glow.subject)
+  local host = ns.Overlay.Element(glow)
 
   local okLoad, loadErr = pcall(C_AddOns.LoadAddOn, "Blizzard_AuraContainer")
   if not okLoad then
@@ -79,20 +91,21 @@ local function Arm(entry, key)
     Note(key, "the container was refused: " .. tostring(container))
     return nil
   end
-  -- A child frame of the overlay, so the occluder draws ABOVE the overlay's own mark.
+  -- A child frame of the element, so the occluder draws ABOVE that element's own mark and
+  -- over nothing else: a second glow on the same subject has its own element and its own mark.
   container:SetAllPoints(host)
 
   local armed = false
   local okSlot, slotErr = pcall(container.AddAuraSlot, container, "count", "HELPFUL", {
     candidateFilters = {
-      includeSpellIDs = { [glow.count.aura] = true },
+      includeSpellIDs = { [glow.bind.aura] = true },
       isFromPlayerOrPlayerPet = true,
     },
     initializeFrame = function(button)
       button:SetSize(entry.width, entry.width)
       button:SetAllPoints(container)
 
-      local fmt, why = Formatter(glow.count.threshold, entry)
+      local fmt, why = Formatter(glow.bind.threshold, entry)
       if fmt == nil then
         Note(key, why)
         return
@@ -132,9 +145,8 @@ local function Arm(entry, key)
     return nil
   end
   Note(key, ("armed on aura %d -- icon %d, %d/%d texels drawn at %d units (residual %+.4f), "
-    .. "trim %+.2f,%+.2f"):format(glow.count.aura, entry.icon, entry.crop.half * 2,
+    .. "trim %+.2f,%+.2f"):format(glow.bind.aura, entry.icon, entry.crop.half * 2,
     64, entry.crop.size, entry.crop.residual, ns.Look.OCCLUDE_X, ns.Look.OCCLUDE_Y))
-  container:SetAlpha(0)
   return container
 end
 
@@ -142,11 +154,10 @@ end
 --- width, so a subject with no laid-out row is DEFERRED rather than armed against a guess.
 function Count.Rebuild()
   wanted = {}
-  keyFor = {}
   pending = {}
   for _, glow in ipairs(ns.Store.All()) do
-    if glow.count ~= nil then
-      local host = ns.Overlay.For(glow.subject)
+    if Count.Owns(glow) then
+      local host = ns.Overlay.Element(glow)
       local icon = ns.Attach.IconOf(glow.subject)
       local width = host:GetWidth()
       if icon == nil or type(width) ~= "number" or width <= 0 then
@@ -156,7 +167,6 @@ function Count.Rebuild()
         local crop = ns.Look.ChooseCrop(width)
         local key = KeyOf(glow, icon, crop.size)
         wanted[key] = { glow = glow, icon = icon, width = width, crop = crop }
-        keyFor[glow] = key
       end
     end
   end
@@ -174,7 +184,7 @@ function Count.Rebuild()
 
   for key, entry in pairs(wanted) do
     if containers[key] ~= nil then
-      containers[key]:SetAllPoints(ns.Overlay.For(entry.glow.subject))
+      containers[key]:SetAllPoints(ns.Overlay.Element(entry.glow))
     elseif not failed[key] then
       -- A container cannot be destroyed, so a key that failed to arm is left failed until
       -- `/sg rearm` or until the key itself changes. Retrying on every layout would build a
@@ -183,16 +193,6 @@ function Count.Rebuild()
       failed[key] = containers[key] == nil
     end
   end
-end
-
---- A gate over a binding closes the widget before the client draws it. Through ALPHA on our
---- own container frame: the button's own `Shown` is the client's, and a hide here would be
---- one more thing anchored above it to reason about.
-function Count.SetGate(glow, open)
-  local key = keyFor[glow]
-  local container = key and containers[key]
-  if container == nil then return end
-  if open then container:SetAlpha(1) else container:SetAlpha(0) end
 end
 
 function Count.Describe(subject)

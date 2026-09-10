@@ -20,6 +20,10 @@ function Store.Load()
   if type(SmartGloDB) ~= "table" then SmartGloDB = {} end
   if type(SmartGloDB.glows) ~= "table" then SmartGloDB.glows = {} end
   db = SmartGloDB
+  ns.db = db
+  -- Rules stored before the two bowls carry `show` and `count`; they mean what `when` and a
+  -- count `bind` mean now, so they are rewritten on the way in rather than handled twice.
+  for _, glow in ipairs(db.glows) do ns.Rules.Modernize(glow) end
 end
 
 local function glows()
@@ -55,7 +59,7 @@ function Store.SetForSubject(spellID, list)
   local errs = {}
   for i, glow in ipairs(list) do
     glow.subject = spellID
-    local ok, why = ns.Rules.CheckGlow(glow)
+    local ok, why = ns.Rules.CheckGlow(ns.Rules.Modernize(glow))
     if ok == nil then
       for _, err in ipairs(why) do errs[#errs + 1] = ("glow %d: %s"):format(i, err) end
     end
@@ -76,7 +80,7 @@ end
 function Store.Replace(list)
   local errs = {}
   for i, glow in ipairs(list) do
-    local ok, why = ns.Rules.CheckGlow(glow)
+    local ok, why = ns.Rules.CheckGlow(ns.Rules.Modernize(glow))
     if ok == nil then
       for _, err in ipairs(why) do errs[#errs + 1] = ("glow %d: %s"):format(i, err) end
     end
@@ -149,10 +153,8 @@ ns.RegisterCommand{
     end
     for i, glow in ipairs(all) do
       local bits = {}
-      if glow.show then bits[#bits + 1] = ns.Rules.Describe(glow.show) end
-      if glow.count then
-        bits[#bits + 1] = ("count(%d) >= %d"):format(glow.count.aura, glow.count.threshold)
-      end
+      if glow.when then bits[#bits + 1] = ns.Rules.Describe(glow.when) end
+      if glow.bind then bits[#bits + 1] = ns.Rules.DescribeBind(glow.bind) end
       ns.Printf("  %d. %s |cff999999on %s -- %s [%s]|r", i, glow.name or "(unnamed)",
         ns.SpellLabel(glow.subject), table.concat(bits, " + "),
         glow.color or ns.Look.DEFAULT)

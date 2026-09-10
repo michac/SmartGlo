@@ -17,8 +17,6 @@ local function Checksum(s)
   return b * 65536 + a
 end
 
-Wire.Checksum = Checksum
-
 local function api()
   if type(C_EncodingUtil) ~= "table" then return nil, "C_EncodingUtil is absent" end
   return C_EncodingUtil
