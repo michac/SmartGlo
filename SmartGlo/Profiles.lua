@@ -238,7 +238,7 @@ Profiles.list = {
       -- never laid out. The APL is no guide here -- it names Sentinel nowhere and simply plays
       -- the Avenging Wrath side -- so these two mirror the Wrath rungs onto 389539.
       -- ⚠ The buff Sentinel applies is Divine Resolve, whose id the KB does not carry. If
-      -- `aura(389539)` reads `?`, that row does not carry the buff and the id is what to fix.
+      -- `aura(sentinel)` reads `?`, that row does not carry the buff and the id is what to fix.
       {
         name = "Sentinel with Divine Toll up",
         subject = 389539,
