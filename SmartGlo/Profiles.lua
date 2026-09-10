@@ -206,9 +206,9 @@ Profiles.list = {
         when = { t = "at_max_charges", spell = 432459 },
       },
       {
-        name = "Sacred Weapon next and its buff is down",
+        name = "Sacred Weapon next and capped",
         subject = 432472,
-        when = { t = "not", term = { t = "aura", spell = 432502 } },
+        when = { t = "at_max_charges", spell = 432472 },
       },
       {
         name = "Avenger's Shield on Glory of the Vanguard",
