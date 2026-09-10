@@ -234,10 +234,29 @@ local function Best(a, b)
   return ns.F
 end
 
---- The name a rule would write for a spell, and the id when nothing names it. `Symbols.lua`
---- carries the KB's inventory; an override id is in no inventory and prints as a number.
+--- The name a rule would WRITE for a spell, and the id when nothing names it. This feeds
+--- `Describe` and `DescribeBind`, whose output has to parse back, so it may only ever return
+--- a rule symbol or a bare id -- never a display name, which carries spaces and punctuation
+--- the grammar cannot read. `Rules.Pretty` is the one to use for anything a person reads.
 function Rules.Label(spellID)
   return ns.Names.Of(spellID) or tostring(spellID)
+end
+
+--- The same thing for a HUMAN: the rule symbol when there is one, else the client's own name
+--- for the id, else the bare number. `Symbols.lua` carries the KB's ability inventory, so an
+--- aura or override id is in no inventory and used to print as a raw number in `/sg why`.
+--- The client is Tier 1 for id -> name and knows every id, which is what closes that gap.
+--- ⚠ Never route parseable output through this.
+function Rules.Pretty(spellID)
+  local symbol = ns.Names.Of(spellID)
+  if symbol ~= nil then return symbol end
+  if C_Spell ~= nil and C_Spell.GetSpellName ~= nil then
+    local ok, name = pcall(C_Spell.GetSpellName, spellID)
+    if ok and type(name) == "string" and name ~= "" then
+      return ("%s (%d)"):format(name, spellID)
+    end
+  end
+  return tostring(spellID)
 end
 
 local Eval
@@ -312,7 +331,7 @@ end
 
 local function EvalReady(term, trace)
   if Known(term.spell) == false then
-    trace[#trace + 1] = { text = "ready(" .. Rules.Label(term.spell)
+    trace[#trace + 1] = { text = "ready(" .. Rules.Pretty(term.spell)
       .. "): you do not know this spell", verdict = ns.UNKNOWN }
     return ns.UNKNOWN
   end
@@ -328,7 +347,7 @@ local function EvalReady(term, trace)
   end
   local verdict = ns.F
   if not active and enabled ~= false then verdict = ns.T end
-  trace[#trace + 1] = { text = "ready(" .. Rules.Label(term.spell) .. ")", verdict = verdict }
+  trace[#trace + 1] = { text = "ready(" .. Rules.Pretty(term.spell) .. ")", verdict = verdict }
   return verdict
 end
 
@@ -336,7 +355,7 @@ end
 --- is UNKNOWN rather than absent (cooldown-manager.md §5.1).
 local function EvalAura(term, trace)
   local verdict = ns.Attach.AuraLatch(term.spell)
-  local label = "aura(" .. Rules.Label(term.spell) .. ")"
+  local label = "aura(" .. Rules.Pretty(term.spell) .. ")"
   if verdict == ns.UNKNOWN then
     label = label .. ": no Cooldown Manager row is bound to it"
   end
@@ -436,12 +455,12 @@ local function EvalTalent(term, trace)
   local selected, why = ReadTalent(term.spell)
   if selected == nil then
     trace[#trace + 1] = { verdict = ns.UNKNOWN,
-      text = ("talent(%s): %s"):format(Rules.Label(term.spell), why) }
+      text = ("talent(%s): %s"):format(Rules.Pretty(term.spell), why) }
     return ns.UNKNOWN
   end
   local verdict = selected and ns.T or ns.F
   trace[#trace + 1] = {
-    text = ("talent(%s) by the trait config"):format(Rules.Label(term.spell)),
+    text = ("talent(%s) by the trait config"):format(Rules.Pretty(term.spell)),
     verdict = verdict,
   }
   return verdict

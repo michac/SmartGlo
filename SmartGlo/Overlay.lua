@@ -26,11 +26,16 @@ end
 --- a threshold — a count's crossing is never observed, so there is nothing to start it on —
 --- and an animation does not advance while an ancestor is hidden. Alpha composites over a
 --- turn that never stops.
+--- The mark is a FRACTION of its host, and the host follows the item through a two-point
+--- anchor -- so the host resizes on its own whenever the icon does, with no layout event we
+--- hook and no re-anchor. Sizing off the frame's own resize is what makes the mark follow an
+--- icon-size change, including one made by another addon laying the viewers out.
 local function Build()
   local f = CreateFrame("Frame", nil, UIParent)
   f:SetFrameStrata("MEDIUM")
   f:SetAlpha(0)
   f.elements = {}
+  f:SetScript("OnSizeChanged", SizeMarks)
   return f
 end
 
