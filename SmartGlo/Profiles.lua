@@ -199,6 +199,17 @@ Profiles.list = {
         when = { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
         bind = { cmp = "<", family = "health", percent = 80 },
       },
+      -- ⚠ PROBE. The exact complement of the rung above, sharing its gate, because a sealed
+      -- bind has no readback: with 3+ Holy Power, exactly one lit and flipping at 80% means
+      -- the curve drives alpha on a 0..100 scale; both lit means nothing drives it; both dark
+      -- means the scale is 0..1 and the guard took every input to zero. An instrument, not
+      -- advice -- delete it once that is settled.
+      {
+        name = "PROBE: complement of the rung above",
+        subject = 85673,
+        when = { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
+        bind = { cmp = ">=", family = "health", percent = 80 },
+      },
       {
         name = "Holy Armaments",
         subject = 432459,
