@@ -34,8 +34,10 @@ stds.wow = {
     "C_SpellBook",
     "InCombatLockdown",
 
-    -- Look.lua — the shipped escape builder, so no format string is hand-rolled here.
+    -- Look.lua — the shipped escape builder, so no format string is hand-rolled here, and
+    -- the clock the colour cycle's phase is taken from.
     "CreateTextureMarkup",
+    "GetTime",
 
     -- Core.lua — the session stamps the capture log carries: which spec it was taken on.
     "C_SpecializationInfo",

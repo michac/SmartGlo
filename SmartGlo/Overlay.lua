@@ -57,6 +57,7 @@ local function BuildElement(host)
   ns.Look.Spin(mark)
 
   e.mark = mark
+  e.pulse = ns.Look.Pulse(mark)
   return e
 end
 
@@ -146,11 +147,21 @@ end
 --- here: its occluder is a sibling drawn above the mark, not another writer of the mark's
 --- alpha. Only a duration bind owns that channel, and then a write here would be a second
 --- owner of one channel.
-function Overlay.SetLit(e, lit, color, sealed)
-  local rgb = ns.Look.Rgb(color)
-  e.mark:SetVertexColor(rgb[1], rgb[2], rgb[3])
+function Overlay.SetLit(e, lit, color, sealed, urgent)
+  -- A cycling colour has ONE writer and it is not here; `SetTint` either paints a solid or
+  -- hands the mark to the shared ticker. Either way vertex colour carries no secret, so this
+  -- write is unconditional and never touches the alpha the bind owns.
+  ns.Look.SetTint(e.mark, color)
   e:SetAlpha(lit and 1 or 0)
   if not sealed then
     e.mark:SetAlpha(lit and 1 or 0)
+  end
+  -- The pulse is a fourth channel and owns nothing the other three do: it says how hard the
+  -- mark presses, never whether it is drawn. A sealed mark pulses while the client decides
+  -- its alpha, and a pulse on a dark mark costs nothing because nothing is visible.
+  if urgent and lit then
+    if not e.pulse:IsPlaying() then e.pulse:Play() end
+  elseif e.pulse:IsPlaying() then
+    e.pulse:Stop()
   end
 end

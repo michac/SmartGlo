@@ -387,7 +387,8 @@ function Attach.Evaluate()
     -- threshold. So `open` means the same thing in both: the rule's readable half passed.
     local element = ns.Overlay.Element(glow)
     live[element] = true
-    ns.Overlay.SetLit(element, open, glow.color or ns.Look.DEFAULT, SealsAlpha(glow))
+    ns.Overlay.SetLit(element, open, glow.color or ns.Look.DEFAULT, SealsAlpha(glow),
+      glow.urgent == true)
   end
   ns.Overlay.DarkenStale(live)
   for subject in pairs(bound) do

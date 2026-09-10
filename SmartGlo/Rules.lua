@@ -236,6 +236,9 @@ function Rules.CheckGlow(glow)
   if glow.bind ~= nil then
     CheckBind(glow.bind, glow.when, errs)
   end
+  if glow.urgent ~= nil and glow.urgent ~= true then
+    table.insert(errs, "`urgent` is a flag; it is present or it is not")
+  end
   if glow.color ~= nil and not ns.Look.IsColor(glow.color) then
     table.insert(errs, ("unknown colour %q; known: %s"):format(tostring(glow.color),
       table.concat(ns.Look.Names(), ", ")))

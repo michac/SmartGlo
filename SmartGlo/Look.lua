@@ -11,7 +11,7 @@ local _, ns = ...
 local Look = {}
 ns.Look = Look
 
-Look.DEFAULT = "yellow"
+Look.DEFAULT = "alarm"
 Look.FRACTION = 0.72
 Look.SPIN_SECONDS = 3
 
@@ -57,19 +57,75 @@ local PALETTE = {
   cyan = { 0.37, 0.92, 0.91 },
 }
 
+--- A CYCLE is two colours a mark crosses between, and it exists because a single hue cannot
+--- be visible on every icon: Paladin's art is yellow-heavy, so a yellow mark on a yellow icon
+--- is the one place the glow disappears. Crossing to the opposite side of the wheel means the
+--- mark is never the same hue as its background for more than an instant.
+---
+--- ⚠ Vertex colour is written, not animated. The animation system has no colour type, and the
+--- two ways to fake one both fail here: stacking two textures and crossfading their ALPHA
+--- would fight the sealed bind for the one channel it owns, and a per-mark OnUpdate needs a
+--- frame a texture does not have. So one shared ticker writes every cycling mark instead --
+--- it draws and never evaluates, like the sealed families' own.
+Look.CYCLE_SECONDS = 1.6
+local CYCLES = {
+  alarm = { "purple", "yellow" },
+}
+
+local cycling = setmetatable({}, { __mode = "k" })
+local ticker
+
+local function Lerp(a, b, t)
+  return a + (b - a) * t
+end
+
+local function Tick()
+  -- A triangle wave, so the crossing is even in both directions and neither end holds.
+  local phase = (GetTime() % Look.CYCLE_SECONDS) / Look.CYCLE_SECONDS
+  local t = phase < 0.5 and phase * 2 or (1 - phase) * 2
+  for mark, pair in pairs(cycling) do
+    local from, to = PALETTE[pair[1]], PALETTE[pair[2]]
+    mark:SetVertexColor(Lerp(from[1], to[1], t), Lerp(from[2], to[2], t),
+      Lerp(from[3], to[3], t))
+  end
+  if next(cycling) == nil and ticker ~= nil then
+    ticker:Cancel()
+    ticker = nil
+  end
+end
+
+--- Register a mark as cycling, or take it off. The single writer of a cycling mark's vertex
+--- colour is `Tick`, so `SetLit` must hand the mark over rather than tinting it itself.
+function Look.SetTint(mark, name)
+  local pair = CYCLES[name]
+  if pair == nil then
+    cycling[mark] = nil
+    local rgb = Look.Rgb(name)
+    mark:SetVertexColor(rgb[1], rgb[2], rgb[3])
+    return
+  end
+  cycling[mark] = pair
+  if ticker == nil then ticker = C_Timer.NewTicker(0.05, Tick) end
+end
+
 function Look.IsColor(name)
-  return PALETTE[name] ~= nil
+  return PALETTE[name] ~= nil or CYCLES[name] ~= nil
 end
 
 function Look.Names()
   local names = {}
   for name in pairs(PALETTE) do names[#names + 1] = name end
+  for name in pairs(CYCLES) do names[#names + 1] = name end
   table.sort(names)
   return names
 end
 
+--- A cycle has no single rgb, so anything that needs one -- a preview, a fallback -- takes the
+--- first of the pair rather than the default, which may itself be a cycle.
 function Look.Rgb(name)
-  return PALETTE[name] or PALETTE[Look.DEFAULT]
+  local pair = CYCLES[name]
+  if pair ~= nil then return PALETTE[pair[1]] end
+  return PALETTE[name] or PALETTE[CYCLES[Look.DEFAULT] and CYCLES[Look.DEFAULT][1] or Look.DEFAULT]
 end
 
 --- One white master, tinted per glow: every mark is our texture, so no hue needs its own file.
@@ -110,6 +166,36 @@ function Look.IconEscape(fileID, width, half)
   local hi = (centre + crop.half) / ICON_FILE_SIZE
   return CreateTextureMarkup(fileID, ICON_FILE_SIZE, ICON_FILE_SIZE, crop.size, crop.size,
     lo, hi, lo, hi, 0, 0), crop
+end
+
+--- How hard a mark presses, beyond being lit at all. `urgent` is the only level above plain
+--- and it means "this one outranks the ordinary reading" -- a resource actively being wasted,
+--- not merely a button that is available.
+---
+--- It PULSES rather than bounces, and the choice is not cosmetic: a translation is an offset
+--- in absolute units, so it would need re-arming on every icon-size change -- the exact bug
+--- class that left the mark at its old size until `OnSizeChanged` fixed it. A scale is
+--- proportional and immune. The keyword says the MEANING so the drawing can be retuned
+--- without touching a rule.
+Look.PULSE_SECONDS = 0.45
+Look.PULSE_SCALE = 1.35
+
+function Look.Pulse(region)
+  local group = region:CreateAnimationGroup()
+  local out = group:CreateAnimation("Scale")
+  out:SetScaleFrom(1, 1)
+  out:SetScaleTo(Look.PULSE_SCALE, Look.PULSE_SCALE)
+  out:SetDuration(Look.PULSE_SECONDS / 2)
+  out:SetOrder(1)
+  out:SetSmoothing("IN_OUT")
+  local back = group:CreateAnimation("Scale")
+  back:SetScaleFrom(Look.PULSE_SCALE, Look.PULSE_SCALE)
+  back:SetScaleTo(1, 1)
+  back:SetDuration(Look.PULSE_SECONDS / 2)
+  back:SetOrder(2)
+  back:SetSmoothing("IN_OUT")
+  group:SetLooping("REPEAT")
+  return group
 end
 
 --- One looping turn, armed at build and never started on a threshold. A count's crossing is

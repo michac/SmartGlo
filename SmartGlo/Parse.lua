@@ -345,6 +345,12 @@ function Parse.Text(text)
         current.bind, why = ParseBind(rest, scope)
       elseif head == "color" then
         current.color = string.lower(string.match(rest, "^(%S*)"))
+      elseif head == "urgent" then
+        if rest ~= "" then
+          why = ("`urgent` takes nothing, found %q"):format(rest)
+        else
+          current.urgent = true
+        end
       else
         why = ("unknown keyword %q"):format(head)
       end
@@ -388,6 +394,9 @@ function Parse.Render(glows)
     end
     if glow.color ~= nil then
       lines[#lines + 1] = "  color  " .. glow.color
+    end
+    if glow.urgent then
+      lines[#lines + 1] = "  urgent"
     end
     lines[#lines + 1] = ""
   end
