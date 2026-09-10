@@ -25,6 +25,7 @@ local SECONDARY = {
 --- the CDM's own verdict flags, not charge counts -- a count stays refused, in both bowls.
 local CALLS = {
   ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
+  active = true,
 }
 
 local BIND_FORMS = "<spell>.stacks >= <n> | <spell>.up [on <unit>] [mine] "

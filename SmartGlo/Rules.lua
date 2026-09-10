@@ -49,6 +49,7 @@ local SEALED_FAMILY = { count = true, duration = true, presence = true }
 --- and the trigger table all ask this, so a new call cannot be half-added.
 local SPELL_TERM = {
   ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
+  active = true,
 }
 
 local READABLE_TERM = { resource = true }
@@ -401,6 +402,35 @@ local function ReadFlag(item, field)
   return value
 end
 
+--- Is this spell's own row currently showing an AURA rather than a cooldown? The Cooldown
+--- Manager records which source won each refresh, and `wasSetFromAura` is that verdict as a
+--- plain boolean -- so a buff with no tracked-buff row of its own is still readable through
+--- the cooldown row it rides. Sentinel is the case: nothing tracks it, and `aura()` cannot
+--- see it, but its own row knows its dial is drawing a buff.
+local function EvalActive(term, trace)
+  local label = ("active(%s)"):format(Rules.Pretty(term.spell))
+  local item = ns.Attach.ItemFor(term.spell)
+  if item == nil then
+    trace[#trace + 1] = { text = label .. ": no Cooldown Manager row is laid out for it",
+      verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  local fromAura, why = ReadFlag(item, "wasSetFromAura")
+  if why ~= nil then
+    trace[#trace + 1] = { text = label .. ": " .. why, verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  -- nil is a row that has set no source since it was cleared, which is not the same as false.
+  if fromAura == nil then
+    trace[#trace + 1] = { text = label .. ": the row has set no visual data source yet",
+      verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  local verdict = fromAura and ns.T or ns.F
+  trace[#trace + 1] = { text = label, verdict = verdict }
+  return verdict
+end
+
 local function EvalCharges(term, trace, wantMax)
   local label = ("%s(%s)"):format(term.t, Rules.Pretty(term.spell))
   local item = ns.Attach.ItemFor(term.spell)
@@ -609,6 +639,8 @@ function Eval(term, trace)
     return EvalCharges(term, trace, true)
   elseif term.t == "no_charges" then
     return EvalCharges(term, trace, false)
+  elseif term.t == "active" then
+    return EvalActive(term, trace)
   elseif term.t == "talent" then
     return EvalTalent(term, trace)
   end
@@ -651,6 +683,7 @@ local TRIGGERS = {
   resource = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" },
   ready = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_USABLE", "SPELL_UPDATE_CHARGES" },
   aura = {},
+  active = { "SPELL_UPDATE_COOLDOWN", "UNIT_AURA" },
   at_max_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
   no_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
   -- ⚠ NOT the events that make a talent readable -- those are handled by the prime above,

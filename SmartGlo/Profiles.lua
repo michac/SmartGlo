@@ -186,27 +186,26 @@ Profiles.list = {
   -- No count bind here, though `consecration,if=buff.divine_guidance.stack>=5` is the right
   -- shape for one and `Rules.Gate` now covers the absence case that ruled it out. It is left
   -- out because it is a rotation call, not because it cannot be expressed.
+  -- From the simc `protection` list, Method's 12.1 priority, and the class KB's own
+  -- active-mitigation loop. Same contract as the other profiles: a lit icon is a rung whose
+  -- readable conditions hold, not an instruction, and several light at once.
+  --
+  -- ⚠ GENERATED FROM `rules/protection-lightsmith.sg` through the parser, so the twin cannot
+  -- drift from the file. Edit the .sg and re-render; do not hand-edit the table.
   ["protection-lightsmith"] = {
     label = "Protection — Lightsmith",
     glows = {
       {
-        name = "Word of Glory on Shining Light",
+        name = "Shining Light about to cap",
         subject = 85673,
-        when = { t = "aura", spell = 321136 },
+        bind = { family = "count", aura = 321136, threshold = 2 },
       },
-      -- The paid cast, for when you are actually hurt rather than when it is free. Health can
-      -- only ever be a BIND: `UnitHealth` is unconditionally secret, so no gate can compare it
-      -- and the threshold goes to the client as a curve. The readable half carries the part
-      -- that can be read -- 3 Holy Power is the cost, so this is "castable".
       {
         name = "Word of Glory when hurt",
         subject = 85673,
         when = { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
-        bind = { cmp = "<", family = "health", percent = 80 },
+        bind = { family = "health", cmp = "<", percent = 80 },
       },
-      -- Not `ready()`: a mark that means "this button is available" says what the icon's own
-      -- swipe already says. At the cap the next charge is being thrown away, which is a
-      -- decision, and the CDM's own visual-source flags answer it without a charge count.
       {
         name = "Holy Armaments capped",
         subject = 432459,
@@ -215,51 +214,21 @@ Profiles.list = {
       {
         name = "Avenger's Shield on Glory of the Vanguard",
         subject = 31935,
-        when = { t = "aura", spell = 1267203 },  -- `vanguard`; the longer name is ambiguous
+        when = { t = "aura", spell = 1267203 },
       },
-      {
-        name = "Avenging Wrath with Divine Toll up",
-        subject = 31884,
-        when = { t = "and", terms = {
-          { t = "ready", spell = 31884 },
-          { t = "ready", spell = 375576 }
-        } },
-      },
-      {
-        name = "Divine Toll inside Avenging Wrath",
-        subject = 375576,
-        when = { t = "and", terms = {
-          { t = "ready", spell = 375576 },
-          { t = "aura", spell = 31884 }
-        } },
-      },
-      -- Avenging Wrath and Sentinel are a CHOICE NODE, so both sides ship and the untalented
-      -- one cannot fire: `ready()` reads UNKNOWN for a spell you do not know, and its row is
-      -- never laid out. The APL is no guide here -- it names Sentinel nowhere and simply plays
-      -- the Avenging Wrath side -- so these two mirror the Wrath rungs onto 389539.
-      -- Divine Toll gets no Sentinel twin: the CDM tracks no row for Sentinel or for Divine
-      -- Resolve, the buff it applies, so an aura term on it could never read anything.
       {
         name = "Sentinel with Divine Toll up",
         subject = 389539,
         when = { t = "and", terms = {
-          { t = "ready", spell = 389539 },
-          { t = "ready", spell = 375576 }
-        } },
+            { t = "ready", spell = 389539 },
+            { t = "ready", spell = 375576 },
+          } },
       },
-
-      -- The BUILDERS. `judgment,if=full_recharge_time<=gcd*2` is a "you are about to waste a
-      -- charge" rung, and at-the-cap is its readable half: strictly later than the APL's, so
-      -- it under-marks rather than over-marks. Crusader's Judgment adds the second charge; on
-      -- a build without it this reads as plain off-cooldown, which is honest either way.
       {
         name = "Judgment at cap",
-        subject = 20271,
-        when = { t = "at_max_charges", spell = 20271 },
+        subject = 275779,
+        when = { t = "at_max_charges", spell = 275779 },
       },
-      -- The filler builder is a CHOICE NODE, so both rungs ship and only the talented one can
-      -- ever attach -- the other has no laid-out row and stays dark. Three charges is where a
-      -- Protection rotation actually leaks, which makes the cap the rung worth marking.
       {
         name = "Blessed Hammer at cap",
         subject = 204019,
@@ -284,14 +253,10 @@ Profiles.list = {
         name = "Consecration when you are not in it",
         subject = 26573,
         when = { t = "and", terms = {
-          { t = "ready", spell = 26573 },
-          { t = "not", term = { t = "aura", spell = 188370 } }
-        } },
+            { t = "ready", spell = 26573 },
+            { t = "not", term = { t = "aura", spell = 188370 } },
+          } },
       },
-      -- Two rungs on the same button, and the second is the first with its requirement
-      -- lowered. At the cap you press regardless, because the next generator overcaps; with
-      -- the mitigation buff down it is worth pressing at the castable minimum instead. `>= 5`
-      -- rather than `== 5` so a talent that raises the cap cannot step over it.
       {
         name = "Shield of the Righteous at cap",
         subject = 53600,
@@ -301,29 +266,155 @@ Profiles.list = {
         name = "Shield of the Righteous with the buff down",
         subject = 53600,
         when = { t = "and", terms = {
-          { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
-          { t = "not", term = { t = "aura", spell = 132403 } }
-        } },
+            { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
+            { t = "not", term = { t = "aura", spell = 132403 } },
+          } },
+      },
+      {
+        name = "Judgment with room to spend",
+        subject = 275779,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 275779 },
+            { t = "resource", power = "holy_power", cmp = "<", value = 5 },
+          } },
+      },
+      {
+        name = "Blessed Hammer with room to spend",
+        subject = 204019,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 204019 },
+            { t = "resource", power = "holy_power", cmp = "<", value = 5 },
+          } },
+      },
+      {
+        name = "Hammer of the Righteous with room to spend",
+        subject = 53595,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 53595 },
+            { t = "resource", power = "holy_power", cmp = "<", value = 5 },
+          } },
+      },
+      {
+        name = "Avenger's Shield with room to spend",
+        subject = 31935,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 31935 },
+            { t = "resource", power = "holy_power", cmp = "<=", value = 2 },
+          } },
+      },
+      {
+        name = "Sentinel anyway, Divine Toll is far off",
+        subject = 389539,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 389539 },
+            { t = "not", term = { t = "ready", spell = 375576 } },
+          } },
+        bind = { family = "duration", spell = 375576, cmp = ">", seconds = 30 },
+      },
+      {
+        name = "Divine Toll inside Sentinel",
+        subject = 375576,
+        when = { t = "ready", spell = 375576 },
+        bind = { family = "presence", aura = 389539, unit = "player", filter = "HELPFUL" },
+      },
+      {
+        name = "Consecration at five Divine Guidance",
+        subject = 26573,
+        bind = { family = "count", aura = 433106, threshold = 5 },
+      },
+      {
+        name = "Ardent Defender when hurt",
+        subject = 31850,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "and", terms = {
+                        { t = "ready", spell = 31850 },
+                        { t = "not", term = { t = "aura", spell = 31850 } },
+                      } },
+                    { t = "not", term = { t = "aura", spell = 86659 } },
+                  } },
+                { t = "not", term = { t = "aura", spell = 642 } },
+              } },
+            { t = "not", term = { t = "active", spell = 389539 } },
+          } },
+        bind = { family = "health", cmp = "<", percent = 70 },
+      },
+      {
+        name = "Guardian of Ancient Kings when hurt",
+        subject = 86659,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "and", terms = {
+                        { t = "ready", spell = 86659 },
+                        { t = "not", term = { t = "aura", spell = 31850 } },
+                      } },
+                    { t = "not", term = { t = "aura", spell = 86659 } },
+                  } },
+                { t = "not", term = { t = "aura", spell = 642 } },
+              } },
+            { t = "not", term = { t = "active", spell = 389539 } },
+          } },
+        bind = { family = "health", cmp = "<", percent = 70 },
+      },
+      {
+        name = "Divine Shield when hurt",
+        subject = 642,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "and", terms = {
+                        { t = "ready", spell = 642 },
+                        { t = "not", term = { t = "aura", spell = 31850 } },
+                      } },
+                    { t = "not", term = { t = "aura", spell = 86659 } },
+                  } },
+                { t = "not", term = { t = "aura", spell = 642 } },
+              } },
+            { t = "not", term = { t = "active", spell = 389539 } },
+          } },
+        bind = { family = "health", cmp = "<", percent = 70 },
+      },
+      {
+        name = "Blessing of Spellwarding when hurt",
+        subject = 204018,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "and", terms = {
+                        { t = "ready", spell = 204018 },
+                        { t = "not", term = { t = "aura", spell = 31850 } },
+                      } },
+                    { t = "not", term = { t = "aura", spell = 86659 } },
+                  } },
+                { t = "not", term = { t = "aura", spell = 642 } },
+              } },
+            { t = "not", term = { t = "active", spell = 389539 } },
+          } },
+        bind = { family = "health", cmp = "<", percent = 70 },
+      },
+      {
+        name = "Lay on Hands when nearly dead",
+        subject = 633,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "and", terms = {
+                        { t = "ready", spell = 633 },
+                        { t = "not", term = { t = "aura", spell = 31850 } },
+                      } },
+                    { t = "not", term = { t = "aura", spell = 86659 } },
+                  } },
+                { t = "not", term = { t = "aura", spell = 642 } },
+              } },
+            { t = "not", term = { t = "active", spell = 389539 } },
+          } },
+        bind = { family = "health", cmp = "<", percent = 50 },
       },
     },
   },
 
-  -- ⚠ AN INSTRUMENT, NOT ADVICE. Four health binds and nothing else, so every mark on screen
-  -- is one of these four.
-  --
-  -- A LADDER: three rising thresholds and the complement of the lowest, read at once. The
-  -- COUNT of lit marks is your health band, so the curve is exercised at three points rather
-  -- than one, and out of combat your own regeneration sweeps it for you -- nothing here needs
-  -- damage taken on purpose, a threshold crossed on cue, or a stopwatch.
-  --
-  --   Word of Glory lit               >= 80%        all three lit  = 80%+
-  --   Shield of the Righteous lit     >= 60%        two lit        = 60-80%
-  --   Consecration lit                >= 40%        one lit        = 40-60%
-  --   Avenger's Shield lit            <  40%        only AS lit    = under 40%
-  --
-  -- Consecration and Avenger's Shield are exact complements, so EXACTLY ONE of them is lit at
-  -- every health total. Both lit or both dark means the reading is void -- a standing validity
-  -- check that costs nothing and exercises the `<` compile path beside the `>=` one.
   ["protection-healthprobe"] = {
     label = "Protection — health-bind ladder",
     glows = {
