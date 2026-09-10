@@ -190,6 +190,17 @@ Profiles.list = {
     label = "Protection — Lightsmith",
     glows = {
       {
+        name = "Word of Glory free and hurt",
+        subject = 85673,
+        when = { t = "aura", spell = 321136 },
+        bind = { family = "health", cmp = "<", percent = 50 },
+      },
+      {
+        name = "Word of Glory free",
+        subject = 85673,
+        when = { t = "aura", spell = 321136 },
+      },
+      {
         name = "Shining Light about to cap",
         subject = 85673,
         bind = { family = "count", aura = 321136, threshold = 2 },
@@ -267,6 +278,17 @@ Profiles.list = {
         when = { t = "and", terms = {
             { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
             { t = "not", term = { t = "aura", spell = 132403 } },
+          } },
+      },
+      {
+        name = "Consecration to refresh, nothing else up",
+        subject = 26573,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "ready", spell = 26573 },
+                { t = "not", term = { t = "ready", spell = 275779 } },
+              } },
+            { t = "not", term = { t = "ready", spell = 31935 } },
           } },
       },
       {
