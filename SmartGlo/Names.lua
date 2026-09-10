@@ -11,20 +11,46 @@ ns.Names = Names
 
 --- Built on first use and kept: 40 specs x ~170 names is a table nobody wants at load time,
 --- and in practice a session touches one spec.
-local index = {}
+local index = { ability = {}, aura = {} }
 
-local function IndexFor(key)
-  local built = index[key]
+--- Two namespaces, and the TERM picks which. `on` / `ready()` want something the spec can
+--- learn; `aura()` wants something the Cooldown Manager can track. A name in both worlds --
+--- consecration, shield_of_the_righteous -- is a different spell in each, so resolving an
+--- aura against the ability table is not a near miss, it is a wrong answer that parses.
+local TABLES = {
+  ability = { specs = "specs", names = "names" },
+  aura = { specs = "auraSpecs", names = "auraNames" },
+}
+
+local function IndexFor(key, kind)
+  local where = TABLES[kind] or TABLES.ability
+  local cache = index[kind] or index.ability
+  local built = cache[key]
   if built ~= nil then return built end
-  local ids = ns.Symbols.specs[key]
+  local ids = ns.Symbols[where.specs][key]
   if ids == nil then return nil end
   built = {}
   for _, id in ipairs(ids) do
-    local name = ns.Symbols.names[id]
+    local name = ns.Symbols[where.names][id]
     if name ~= nil then built[name] = id end
   end
-  index[key] = built
+  cache[key] = built
   return built
+end
+
+--- Why a bare name is not in the aura table: it may name two tracked rows rather than none,
+--- and then the ids are what the author has to choose between.
+local function AuraRefusal(key, bare)
+  local by_spec = ns.Symbols.auraAmbiguous and ns.Symbols.auraAmbiguous[key]
+  local ids = by_spec and by_spec[bare]
+  if ids == nil then
+    return ("%s tracks no aura called %q -- an aura() term reads through a Cooldown Manager "
+      .. "row, so a buff with no tracked row cannot be named here"):format(key, bare)
+  end
+  local parts = {}
+  for _, id in ipairs(ids) do parts[#parts + 1] = tostring(id) end
+  return ("%q names %d tracked rows in %s (%s); write the id you mean"):format(
+    bare, #ids, key, table.concat(parts, ", "))
 end
 
 --- A scope word: `demonology`, or `warlock.demonology` when the bare word names two specs.
@@ -54,7 +80,10 @@ end
 
 --- A spell reference: a raw id, `class.spec.name`, or a bare name inside `scope`.
 --- The refusal names what would have made it resolvable; it never falls back to a guess.
-function Names.Resolve(text, scope)
+--- `kind` is "ability" (the default) or "aura". A raw id passes through either way: the
+--- table is how a NAME is found, never a gate on what a rule may name.
+function Names.Resolve(text, scope, kind)
+  kind = kind or "ability"
   text = string.lower(text or "")
   local number = tonumber(text)
   if number ~= nil then
@@ -69,8 +98,12 @@ function Names.Resolve(text, scope)
   if class ~= nil then
     local key, why = Names.Scope(class .. "." .. spec)
     if key == nil then return nil, why end
-    local id = IndexFor(key)[bare]
-    if id == nil then return nil, ("%s has no %q"):format(key, bare) end
+    local by_name = IndexFor(key, kind)
+    local id = by_name and by_name[bare]
+    if id == nil then
+      if kind == "aura" then return nil, AuraRefusal(key, bare) end
+      return nil, ("%s has no %q"):format(key, bare)
+    end
     return id
   end
 
@@ -81,8 +114,12 @@ function Names.Resolve(text, scope)
     return nil, ("%q needs a scope -- put `spec demonology` above the rules, or write "
       .. "warlock.demonology.%s, or a raw spell id"):format(text, text)
   end
-  local id = IndexFor(scope)[text]
-  if id == nil then return nil, ("%s has no %q"):format(scope, text) end
+  local by_name = IndexFor(scope, kind)
+  local id = by_name and by_name[text]
+  if id == nil then
+    if kind == "aura" then return nil, AuraRefusal(scope, text) end
+    return nil, ("%s has no %q"):format(scope, text)
+  end
   return id
 end
 

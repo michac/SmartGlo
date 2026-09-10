@@ -111,7 +111,10 @@ local function Primary(p)
     end
     local closed, closeWhy = Expect(p, ")")
     if not closed then return nil, closeWhy end
-    local spell, resolveWhy = ns.Names.Resolve(ref.text, p.scope)
+    -- The term picks the namespace: `aura()` reads a tracked row, everything else reads
+    -- something the spec learns, and the same word can be both.
+    local kind = tok.text == "aura" and "aura" or "ability"
+    local spell, resolveWhy = ns.Names.Resolve(ref.text, p.scope, kind)
     if spell == nil then return nil, resolveWhy end
     return { t = tok.text, spell = spell }
   end
