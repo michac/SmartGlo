@@ -293,7 +293,27 @@ local function EvalResource(term, trace)
   return verdict
 end
 
+--- A spell the player does not have has no cooldown running, so `GetSpellCooldown` answers
+--- READY for it as confidently as for one off cooldown -- and a rule naming a talent from
+--- another build then reads T forever. `includeOverrides` is true because a row whose spell
+--- is overridden (an armament pair, a proc swap) is still the player's.
+local function Known(spell)
+  if C_SpellBook == nil or C_SpellBook.IsSpellInSpellBook == nil
+    or Enum == nil or Enum.SpellBookSpellBank == nil then
+    return nil
+  end
+  local ok, known = pcall(C_SpellBook.IsSpellInSpellBook, spell,
+    Enum.SpellBookSpellBank.Player, true)
+  if not ok or type(known) ~= "boolean" then return nil end
+  return known
+end
+
 local function EvalReady(term, trace)
+  if Known(term.spell) == false then
+    trace[#trace + 1] = { text = "ready(" .. Rules.Label(term.spell)
+      .. "): not in your spellbook", verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
   local ok, info = pcall(C_Spell.GetSpellCooldown, term.spell)
   if not ok or type(info) ~= "table" then
     trace[#trace + 1] = { text = "ready(" .. term.spell .. "): no cooldown info", verdict = ns.UNKNOWN }

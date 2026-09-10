@@ -204,17 +204,6 @@ Profiles.list = {
         when = { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
         bind = { cmp = "<", family = "health", percent = 80 },
       },
-      -- ⚠ PROBE. The exact complement of the rung above, sharing its gate, because a sealed
-      -- bind has no readback: with 3+ Holy Power, exactly one lit and flipping at 80% means
-      -- the curve drives alpha on a 0..100 scale; both lit means nothing drives it; both dark
-      -- means the scale is 0..1 and the guard took every input to zero. An instrument, not
-      -- advice -- delete it once that is settled.
-      {
-        name = "PROBE: complement of the rung above",
-        subject = 85673,
-        when = { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
-        bind = { cmp = ">=", family = "health", percent = 80 },
-      },
       {
         name = "Holy Armaments",
         subject = 432459,
@@ -265,6 +254,36 @@ Profiles.list = {
           { t = "resource", power = "holy_power", cmp = ">=", value = 3 },
           { t = "not", term = { t = "aura", spell = 132403 } }
         } },
+      },
+    },
+  },
+
+  -- ⚠ AN INSTRUMENT, NOT ADVICE. Two complementary health binds and nothing else, so any
+  -- mark on screen is one of these two and no other rung can be mistaken for one.
+  --
+  -- They sit on DIFFERENT subjects on purpose. Every mark is the same hexagon at the same
+  -- place, so a complementary pair sharing one icon draws "both lit" and "one lit" as the
+  -- same picture and cannot report its own result. Two icons is what makes it readable.
+  --
+  -- Neither carries a `when`: a gate is what made the earlier version of this readable only
+  -- while holding 3 Holy Power, which is never when you are free to look at it.
+  --
+  -- At FULL health, with the arm lines in the `attach` capture:
+  --   Shield of the Righteous lit, Word of Glory dark   curve drives alpha, input is 0..100
+  --   both dark, log shows arms + <secret>              curve drives alpha, input is 0..1
+  --   both dark, log shows UNAVAILABLE or no arm        nothing drives alpha on this client
+  ["protection-healthprobe"] = {
+    label = "Protection — health-bind probe",
+    glows = {
+      {
+        name = "PROBE: below 80% health",
+        subject = 85673,
+        bind = { cmp = "<", family = "health", percent = 80 },
+      },
+      {
+        name = "PROBE: at or above 80% health",
+        subject = 53600,
+        bind = { cmp = ">=", family = "health", percent = 80 },
       },
     },
   },
