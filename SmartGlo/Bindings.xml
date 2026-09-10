@@ -1,0 +1,16 @@
+<Bindings>
+	<!--
+	  The client autoloads this from the addon root; it is deliberately NOT in the .toc, which
+	  is how every shipped addon does it (ElvUI, WeakAuras).
+
+	  The binding DECLARES a key the player may assign and never assigns one itself.
+	  `SetBinding` is lockdown-gated and writes over whatever the player had there, so an
+	  addon that picks its own default is both rude and unable to do it mid-combat.
+
+	  Assign it at Esc -> Options -> Key Bindings -> Smart Glo. `?` is SHIFT-/ on a US layout,
+	  so that is what the binding UI will record.
+	-->
+	<Binding category='BINDING_HEADER_SMARTGLO' name='BINDING_NAME_SMARTGLO_WHY_LOG'>
+		SlashCmdList.SMARTGLO("why log")
+	</Binding>
+</Bindings>

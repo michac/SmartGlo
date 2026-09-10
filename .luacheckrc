@@ -76,6 +76,9 @@ stds.wow = {
   -- that is the interface the client reads it through, and the SavedVariables table.
   globals = {
     "SLASH_SMARTGLO1",
+    -- The Key Bindings UI reads these by name; Bindings.xml supplies the binding itself.
+    "BINDING_HEADER_SMARTGLO",
+    "BINDING_NAME_SMARTGLO_WHY_LOG",
     "SlashCmdList",
     "SmartGloDB",
   },

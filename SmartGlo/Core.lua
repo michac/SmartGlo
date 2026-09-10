@@ -115,6 +115,12 @@ end)
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function()
+  -- The Key Bindings UI reads these two globals for the section header and the row label.
+  -- `Bindings.xml` names the binding; nothing here assigns a key, because `SetBinding` is
+  -- lockdown-gated and would write over whatever the player already had on it.
+  BINDING_HEADER_SMARTGLO = "Smart Glo"
+  BINDING_NAME_SMARTGLO_WHY_LOG = "Write /sg why to the capture log"
+
   SLASH_SMARTGLO1 = "/sg"
   SlashCmdList.SMARTGLO = Dispatch
   ns.Store.Load()
