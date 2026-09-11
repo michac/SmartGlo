@@ -360,10 +360,24 @@ local function Known(spell)
   return known
 end
 
+--- ⚠ An OVERRIDE spell is never in the player's book, so `Known` says false for every one of
+--- them and the readiness question would be refused on exactly the rungs that most need it --
+--- Hammer of Wrath inside Sentinel, Ruination over Hand of Gul'dan. A laid-out Cooldown
+--- Manager row bound to that id is the client tracking its cooldown for us, which is the
+--- evidence the spell book cannot give.
+local function Knowable(spell)
+  if Known(spell) ~= false then return true end
+  if type(ns.Attach) ~= "table" or type(ns.Attach.Bound) ~= "function" then return false end
+  local ok, bound = pcall(ns.Attach.Bound)
+  if not ok or type(bound) ~= "table" then return false end
+  return bound[spell] ~= nil
+end
+
 local function EvalReady(term, trace)
-  if Known(term.spell) == false then
+  if not Knowable(term.spell) then
     trace[#trace + 1] = { text = "ready(" .. Rules.Pretty(term.spell)
-      .. "): you do not know this spell", verdict = ns.UNKNOWN }
+      .. "): you do not know this spell, and no laid-out row is showing it",
+      verdict = ns.UNKNOWN }
     return ns.UNKNOWN
   end
   local ok, info = pcall(C_Spell.GetSpellCooldown, term.spell)

@@ -352,7 +352,7 @@ Profiles.list = {
       {
         name = "Hammer of Wrath inside Sentinel",
         subject = 1241413,
-        when = { t = "ready", spell = 24275 },
+        when = { t = "ready", spell = 1241413 },
         urgent = true,
       },
       {
