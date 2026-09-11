@@ -352,7 +352,7 @@ Profiles.list = {
       {
         name = "Hammer of Wrath inside Sentinel",
         subject = 1241413,
-        when = { t = "ready", spell = 1241413 },
+        when = { t = "ready", spell = 24275 },
         urgent = true,
       },
       {
@@ -553,7 +553,7 @@ Profiles.list = {
       },
       {
         name = "Lay on Hands when nearly dead",
-        subject = 633,
+        subject = 471195,
         when = { t = "and", terms = {
             { t = "and", terms = {
                 { t = "and", terms = {

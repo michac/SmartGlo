@@ -16,6 +16,71 @@ local function Copy(value)
   return out
 end
 
+--- A rule set reduced to one number, so "is this still what the profile says" is a comparison
+--- and not a walk. Keys are sorted, so two tables with the same content stamp the same however
+--- they were built.
+local function Stamp(list)
+  local parts = {}
+  local function write(value)
+    if type(value) ~= "table" then
+      parts[#parts + 1] = tostring(value)
+      return
+    end
+    local keys = {}
+    for k in pairs(value) do keys[#keys + 1] = k end
+    table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+    parts[#parts + 1] = "{"
+    for _, k in ipairs(keys) do
+      parts[#parts + 1] = tostring(k) .. "="
+      write(value[k])
+      parts[#parts + 1] = ","
+    end
+    parts[#parts + 1] = "}"
+  end
+  write(list)
+  local text, hash = table.concat(parts), 5381
+  for i = 1, #text do
+    hash = (hash * 33 + string.byte(text, i)) % 4294967296
+  end
+  return hash
+end
+
+--- The source stamped the way an APPLIED copy would be. `Modernize` rewrites the older rule
+--- shapes on the way in, so stamping the raw source and comparing it to a stored rule set that
+--- has been through that pass would report drift on every login for a profile nobody touched.
+local function ProfileStamp(profile)
+  local copy = Copy(profile.glows)
+  for _, glow in ipairs(copy) do ns.Rules.Modernize(glow) end
+  return Stamp(copy)
+end
+
+--- A profile applied from source is a COPY, so a later release changing the source changes
+--- nothing already applied. This carries the change across -- but only when the copy is still
+--- untouched. Three states, and the middle one is why the stamp is stored rather than just
+--- compared: rules that match what was applied are the player's consent to be updated, rules
+--- that do not are the player's own work and are never overwritten.
+local function Resync()
+  local name = db.settings.profile
+  if name == nil then return end
+  local profile = ns.Profiles.Get(name)
+  if profile == nil then
+    ns.Printf("profile %q is applied but no longer exists in this build.", tostring(name))
+    return
+  end
+  local source, applied = ProfileStamp(profile), db.settings.profileStamp
+  if source == applied then return end
+  if Stamp(db.glows) ~= applied then
+    ns.Printf("%s has changed, but your rules differ from the copy you applied -- "
+      .. "leaving them alone. `/sg profile %s` to take the new version.", profile.label, name)
+    return
+  end
+  db.glows = Copy(profile.glows)
+  db.settings.profileStamp = source
+  ns.Printf("%s updated from source (%d glows).", profile.label, #db.glows)
+  ns.log:Mark("profile %s resynced -- stamp %s -> %s", ns.Capture.Safe(name),
+    tostring(applied), tostring(source))
+end
+
 function Store.Load()
   if type(SmartGloDB) ~= "table" then SmartGloDB = {} end
   if type(SmartGloDB.glows) ~= "table" then SmartGloDB.glows = {} end
@@ -24,6 +89,8 @@ function Store.Load()
   ns.db = db
   -- Rules stored before the two bowls carry `show` and `count`; they mean what `when` and a
   -- count `bind` mean now, so they are rewritten on the way in rather than handled twice.
+  for _, glow in ipairs(db.glows) do ns.Rules.Modernize(glow) end
+  Resync()
   for _, glow in ipairs(db.glows) do ns.Rules.Modernize(glow) end
 end
 
@@ -136,6 +203,10 @@ ns.RegisterCommand{
       for _, err in ipairs(errs) do ns.Print("  " .. err) end
       return
     end
+    -- What was applied, and what it looked like. A later login compares both: the name says
+    -- which source to read, the stamp says whether the copy has been touched since.
+    db.settings.profile = string.lower(name)
+    db.settings.profileStamp = ProfileStamp(profile)
     ns.Printf("loaded profile %s (%d glows).", profile.label, #profile.glows)
   end,
 }
