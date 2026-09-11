@@ -126,6 +126,23 @@ function Procs.Enabled()
   return Procs.Alpha() ~= nil
 end
 
+--- `loud` true restores the client's own arrangement, false is the quiet one. Both are
+--- Show/Hide on the same three textures, which is the only channel measured to take.
+local function Swap(frame, loud)
+  local wanted = {
+    ProcStartFlipbook = loud, ProcLoopFlipbook = loud, ProcAltGlow = not loud,
+  }
+  for key, show in pairs(wanted) do
+    local tex = frame[key]
+    if type(tex) == "table" and type(tex.SetShown) == "function" then
+      local ok, err = pcall(tex.SetShown, tex, show)
+      if not ok then
+        ns.log:Mark("procs: %s SetShown refused -- %s", key, ns.Capture.Safe(err))
+      end
+    end
+  end
+end
+
 local function ApplyTo(item)
   local alpha = Procs.Alpha()
   if alpha == nil then return end
@@ -138,28 +155,20 @@ local function ApplyTo(item)
   end
   local frame = AlertFrame(item)
   if frame == nil then return end
-  local ok, err = pcall(frame.SetAlpha, frame, alpha)
-  if not ok then ns.log:Mark("procs: SetAlpha refused -- %s", ns.Capture.Safe(err)) end
-  -- Frame alpha alone leaves the glow at full brightness, while hiding the same frame removes
-  -- it -- so the frame is the right one and its alpha is not reaching the art. The dimming is
-  -- done on the textures' VERTEX colour, which is a separate channel from the alpha the two
-  -- animation groups drive: `ProcLoop` repeats forever and rewrites each flipbook's alpha
-  -- every cycle, and would win against a texture `SetAlpha` between our re-asserts.
-  for _, region in ipairs(Regions(frame)) do
-    if type(region.SetVertexColor) == "function" then
-      local tinted, why = pcall(region.SetVertexColor, region, 1, 1, 1, alpha)
-      if not tinted then
-        ns.log:Mark("procs: %s SetVertexColor refused -- %s", NameOf(frame, region),
-          ns.Capture.Safe(why))
-      end
-    end
-    if type(region.SetAlpha) == "function" then
-      local faded, why = pcall(region.SetAlpha, region, alpha)
-      if not faded then
-        ns.log:Mark("procs: %s SetAlpha refused -- %s", NameOf(frame, region),
-          ns.Capture.Safe(why))
-      end
-    end
+  -- ⚠ Alpha does not dim this glow, measured. The frame accepts 0.25 and reports it back as
+  -- its effective alpha, and the art stays bright; `ProcLoopFlipbook` -- the texture actually
+  -- drawing -- reads back at 1 however it is written, because the looping `ProcLoop` group
+  -- rewrites its alpha every cycle and wins between our re-asserts.
+  --
+  -- So the dial swaps the ART, which is the client's own way of saying the same thing more
+  -- quietly: hide the two flipbooks, show `ProcAltGlow`. That is exactly what Blizzard does
+  -- for a downgraded alert `[T1 src @12.1.0: ActionButtonSpellAlerts.lua:57-65]`. No animation
+  -- drives that texture, so alpha DOES hold on it and still gives a dial within the quiet art.
+  Swap(frame, false)
+  local glow = frame.ProcAltGlow
+  if type(glow) == "table" and type(glow.SetAlpha) == "function" then
+    local ok, err = pcall(glow.SetAlpha, glow, alpha)
+    if not ok then ns.log:Mark("procs: ProcAltGlow alpha refused -- %s", ns.Capture.Safe(err)) end
   end
 end
 
@@ -222,15 +231,7 @@ local function RestoreAll()
       if frame ~= nil then
         local ok, err = pcall(frame.SetAlpha, frame, 1)
         if not ok then ns.log:Mark("procs: restore refused -- %s", ns.Capture.Safe(err)) end
-        for _, region in ipairs(Regions(frame)) do
-          if type(region.SetVertexColor) == "function" then
-            local tinted, why = pcall(region.SetVertexColor, region, 1, 1, 1, 1)
-            if not tinted then
-              ns.log:Mark("procs: %s restore refused -- %s", NameOf(frame, region),
-                ns.Capture.Safe(why))
-            end
-          end
-        end
+        Swap(frame, true)
       end
     end
   end
