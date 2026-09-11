@@ -18,12 +18,30 @@ ns.Procs = Procs
 
 local hooked = false
 
---- Alpha is the addon's dial. ⚠ Setting it on the alert FRAME is not enough on its own: the
---- write is accepted and reads back, and hiding that same frame removes the glow, so it is the
---- right frame -- and the art stays at full brightness anyway. The dial is applied to the
---- textures instead, and `Procs.Describe` reports the whole chain so the next capture says
---- which link is dropping it.
 local DIM = 0.25
+
+--- The alert the client would have drawn is taken away whole, and this is what goes back in
+--- its place: the same template, the same animation machinery, the atlas pair Blizzard itself
+--- swaps in for a one-button alert. A fat rounded square becomes a thin shield outline, so the
+--- two never read alike on one icon.
+local ALT_START = "OneButton_ProcStart_Flipbook"
+local ALT_LOOP = "OneButton_ProcLoop_Flipbook"
+
+--- ⚠ The hue is baked into both flipbooks, so a tint only reaches another colour through
+--- `SetDesaturated`. Whether the pair survives the FlipBook animation is not measured;
+--- `Procs.Describe` reports our frame too, so a snapshot answers it. If the write does not
+--- hold the art is still the shield rather than the square, which is the difference that
+--- matters.
+local TINT = { 0.45, 0.85, 1.0 }
+
+--- Ours, parented to the row and never entered in the client's `activeAlerts`, so nothing
+--- Blizzard runs re-asserts anything on it. Built the way the client builds its second alert
+--- frame `[T1 src @12.1.0: ActionButtonSpellAlerts.lua:26-33]`.
+local ours = setmetatable({}, { __mode = "k" })
+
+--- Whether the client wanted an alert here, read from its own answer at the moment it decided
+--- and remembered because taking the alert away destroys the evidence.
+local wanted = setmetatable({}, { __mode = "k" })
 
 local function Manager()
   local mgr = _G["ActionButtonSpellAlertManager"]
@@ -73,23 +91,11 @@ local function AlphaOf(region)
     ns.Capture.Safe(ign))
 end
 
---- What the client's alert on this row is doing right now, in the words `/sg rows` prints
---- and this module logs when it declines to touch one. Blank is not an outcome: every path
---- through here names itself.
-function Procs.Describe(item)
-  local mgr = Manager()
-  if mgr == nil then return "no alert manager" end
-  if type(mgr.HasAlert) ~= "function" then return "manager has no HasAlert" end
-  local ok, has, kind = pcall(mgr.HasAlert, mgr, item)
-  if not ok then return "HasAlert refused -- " .. ns.Capture.Safe(has) end
-  if not has then return "no alert" end
-  local frame = item.SpellActivationAlert
-  if type(frame) ~= "table" or type(frame.GetAlpha) ~= "function" then
-    return ("alert type %s, no Default frame parked"):format(tostring(kind))
-  end
+--- Every region of one alert frame, with the two things a capture has to tell apart: whether
+--- a write landed, and whether anything downstream is dropping it.
+local function Chain(frame)
   local regions = Regions(frame)
-  local parts = { ("alert type %s, %d region(s), frame %s")
-    :format(tostring(kind), #regions, AlphaOf(frame)) }
+  local parts = { ("%d region(s), frame %s"):format(#regions, AlphaOf(frame)) }
   for _, region in ipairs(regions) do
     local gotShown, shown = pcall(region.IsShown, region)
     local atlas = ""
@@ -97,19 +103,50 @@ function Procs.Describe(item)
       local gotAtlas, name = pcall(region.GetAtlas, region)
       if gotAtlas and name ~= nil then atlas = " " .. ns.Capture.Safe(name) end
     end
-    parts[#parts + 1] = ("%s%s %s shown=%s"):format(NameOf(frame, region), atlas,
+    local tint = ""
+    if type(region.GetVertexColor) == "function" then
+      local gotTint, r, g, b = pcall(region.GetVertexColor, region)
+      if gotTint and r ~= nil then
+        tint = (" rgb=%.2f/%.2f/%.2f"):format(r, g or 0, b or 0)
+      end
+    end
+    parts[#parts + 1] = ("%s%s%s %s shown=%s"):format(NameOf(frame, region), atlas, tint,
       AlphaOf(region), gotShown and ns.Capture.Safe(shown) or "?")
   end
   return table.concat(parts, "; ")
 end
 
---- Blizzard parks the frame on the button itself for a Default alert, and a CDM row can only
---- take a Default one: the AssistedCombatRotation branch needs `actionButton.action`, which a
---- cooldown viewer item does not have `[T1 src @12.1.0: ActionButtonSpellAlerts.lua:117-123]`.
-local function AlertFrame(item)
-  local frame = item.SpellActivationAlert
-  if type(frame) ~= "table" or type(frame.SetAlpha) ~= "function" then return nil end
-  return frame
+--- Both alerts on this row: the client's, and the one we put in its place. Blank is not an
+--- outcome -- every path through here names itself, and "ours: none" on a row the client
+--- wanted to alert is a different bug from "ours: drawn at 0".
+function Procs.Describe(item)
+  local mgr = Manager()
+  if mgr == nil then return "no alert manager" end
+  if type(mgr.HasAlert) ~= "function" then return "manager has no HasAlert" end
+  local ok, has, kind = pcall(mgr.HasAlert, mgr, item)
+  if not ok then return "HasAlert refused -- " .. ns.Capture.Safe(has) end
+  local parts = {}
+  if not has then
+    parts[#parts + 1] = "client: no alert"
+  else
+    local frame = item.SpellActivationAlert
+    if type(frame) ~= "table" or type(frame.GetAlpha) ~= "function" then
+      parts[#parts + 1] = ("client: alert type %s, no Default frame parked"):format(
+        tostring(kind))
+    else
+      parts[#parts + 1] = ("client: alert type %s, %s"):format(tostring(kind), Chain(frame))
+    end
+  end
+  local mine = ours[item]
+  if mine == nil then
+    parts[#parts + 1] = "ours: none built"
+  else
+    local gotShown, shown = pcall(mine.IsShown, mine)
+    parts[#parts + 1] = ("ours: shown=%s %s"):format(
+      gotShown and ns.Capture.Safe(shown) or "?", Chain(mine))
+  end
+  parts[#parts + 1] = ("client wanted an alert: %s"):format(tostring(wanted[item] == true))
+  return table.concat(parts, " | ")
 end
 
 --- `nil` means leave the client's alert alone. A number is the alpha to hold it at, and zero
@@ -126,54 +163,82 @@ function Procs.Enabled()
   return Procs.Alpha() ~= nil
 end
 
---- `loud` true restores the client's own arrangement, false is the quiet one. Both are
---- Show/Hide on the same three textures, which is the only channel measured to take.
-local function Swap(frame, loud)
-  local wanted = {
-    ProcStartFlipbook = loud, ProcLoopFlipbook = loud, ProcAltGlow = not loud,
-  }
-  for key, show in pairs(wanted) do
-    local tex = frame[key]
-    if type(tex) == "table" and type(tex.SetShown) == "function" then
-      local ok, err = pcall(tex.SetShown, tex, show)
-      if not ok then
-        ns.log:Mark("procs: %s SetShown refused -- %s", key, ns.Capture.Safe(err))
+local function OurAlert(item)
+  local frame = ours[item]
+  if frame ~= nil then return frame end
+  local made, built = pcall(CreateFrame, "Frame", nil, item, "ActionButtonSpellAlertTemplate")
+  if not made then
+    ns.log:Mark("procs: our alert frame refused -- %s", ns.Capture.Safe(built))
+    return nil
+  end
+  local sized, why = pcall(function()
+    local w, h = item:GetSize()
+    built:SetSize(w * 1.4, h * 1.4)
+    built:SetPoint("CENTER", item, "CENTER", 0, 0)
+  end)
+  if not sized then ns.log:Mark("procs: our alert sizing refused -- %s", ns.Capture.Safe(why)) end
+  for key, atlas in pairs({ ProcStartFlipbook = ALT_START, ProcLoopFlipbook = ALT_LOOP }) do
+    local tex = built[key]
+    if type(tex) == "table" then
+      local ok, err = pcall(tex.SetAtlas, tex, atlas)
+      if not ok then ns.log:Mark("procs: %s atlas refused -- %s", key, ns.Capture.Safe(err)) end
+      local gotDes, desErr = pcall(tex.SetDesaturated, tex, true)
+      if not gotDes then
+        ns.log:Mark("procs: %s desaturate refused -- %s", key, ns.Capture.Safe(desErr))
+      end
+      local gotTint, tintErr = pcall(tex.SetVertexColor, tex, TINT[1], TINT[2], TINT[3])
+      if not gotTint then
+        ns.log:Mark("procs: %s tint refused -- %s", key, ns.Capture.Safe(tintErr))
       end
     end
   end
+  ours[item] = built
+  return built
+end
+
+--- The birth animation is played by hand: the template registers `OnShow` against `OnHide`,
+--- so the mixin's own replay never fires `[T1 src @12.1.0: ActionButtonSpellAlerts.xml:34-38]`.
+local function ShowOurs(item, alpha)
+  local frame = OurAlert(item)
+  if frame == nil then return end
+  local set, why = pcall(frame.SetAlpha, frame, alpha)
+  if not set then ns.log:Mark("procs: our alpha refused -- %s", ns.Capture.Safe(why)) end
+  local gotShown, shown = pcall(frame.IsShown, frame)
+  if gotShown and shown then return end
+  local ok, err = pcall(function()
+    frame:Show()
+    frame.ProcStartAnim:Play()
+  end)
+  if not ok then ns.log:Mark("procs: our alert show refused -- %s", ns.Capture.Safe(err)) end
+end
+
+local function HideOurs(item)
+  local frame = ours[item]
+  if frame == nil then return end
+  local ok, err = pcall(function()
+    frame.ProcStartAnim:Stop()
+    frame.ProcLoop:Stop()
+    frame:Hide()
+  end)
+  if not ok then ns.log:Mark("procs: our alert hide refused -- %s", ns.Capture.Safe(err)) end
 end
 
 local function ApplyTo(item)
   local alpha = Procs.Alpha()
-  if alpha == nil then return end
-  if alpha <= 0 then
-    local mgr = Manager()
-    if mgr == nil then return end
-    local ok, err = pcall(mgr.HideAlert, mgr, item)
-    if not ok then ns.log:Mark("procs: HideAlert refused -- %s", ns.Capture.Safe(err)) end
+  if alpha == nil or not wanted[item] then
+    HideOurs(item)
     return
   end
-  local frame = AlertFrame(item)
-  if frame == nil then return end
-  -- ⚠ Alpha does not dim this glow, measured. The frame accepts 0.25 and reports it back as
-  -- its effective alpha, and the art stays bright; `ProcLoopFlipbook` -- the texture actually
-  -- drawing -- reads back at 1 however it is written, because the looping `ProcLoop` group
-  -- rewrites its alpha every cycle and wins between our re-asserts.
-  --
-  -- So the dial swaps the ART, which is the client's own way of saying the same thing more
-  -- quietly: hide the two flipbooks, show `ProcAltGlow`. That is exactly what Blizzard does
-  -- for a downgraded alert `[T1 src @12.1.0: ActionButtonSpellAlerts.lua:57-65]`. No animation
-  -- drives that texture, so alpha DOES hold on it and still gives a dial within the quiet art.
-  -- The FRAME goes back to full: the dial lives on the quiet texture, and a frame left at
-  -- whatever alpha a previous setting wrote would hide the art we just swapped in.
-  local shown, why = pcall(frame.SetAlpha, frame, 1)
-  if not shown then ns.log:Mark("procs: frame alpha refused -- %s", ns.Capture.Safe(why)) end
-  Swap(frame, false)
-  local glow = frame.ProcAltGlow
-  if type(glow) == "table" and type(glow.SetAlpha) == "function" then
-    local ok, err = pcall(glow.SetAlpha, glow, alpha)
-    if not ok then ns.log:Mark("procs: ProcAltGlow alpha refused -- %s", ns.Capture.Safe(err)) end
+  local mgr = Manager()
+  if mgr ~= nil then
+    local ok, err = pcall(mgr.HideAlert, mgr, item)
+    if not ok then ns.log:Mark("procs: HideAlert refused -- %s", ns.Capture.Safe(err)) end
   end
+  if alpha <= 0 then
+    HideOurs(item)
+    return
+  end
+  ShowOurs(item, alpha)
 end
 
 --- Why this hook did nothing, recorded on CHANGE. `RefreshOverlayGlow` fires many times a
@@ -203,6 +268,18 @@ local function OnRefresh(item)
     Reason(item, ("no rule on %s"):format(ns.SpellLabel(subject)))
     return
   end
+  local mgr = Manager()
+  if mgr == nil then
+    Reason(item, "no alert manager")
+    return
+  end
+  -- Read BEFORE `ApplyTo`, which hides the alert and with it the answer.
+  local ok, has = pcall(mgr.HasAlert, mgr, item)
+  if not ok then
+    Reason(item, "HasAlert refused -- " .. ns.Capture.Safe(has))
+    return
+  end
+  wanted[item] = has == true
   Reason(item, ("applying to %s"):format(ns.SpellLabel(subject)))
   ApplyTo(item)
 end
@@ -226,18 +303,11 @@ function Procs.InstallHooks(mixinNames)
     #names, #mixinNames, #names > 0 and table.concat(names, ", ") or "none")
 end
 
---- Put every alert back to full. A dimmed one restores exactly; a HIDDEN one cannot be
---- re-shown from here, and the client puts it back on its next refresh.
+--- Ours goes away; the client's own alert comes back on its next `RefreshOverlayGlow`,
+--- because taking it out of `activeAlerts` is exactly what makes the next `ShowAlert` fire.
 local function RestoreAll()
   for subject, item in pairs(ns.Attach.Bound()) do
-    if ns.Store.Speaks(subject) then
-      local frame = AlertFrame(item)
-      if frame ~= nil then
-        local ok, err = pcall(frame.SetAlpha, frame, 1)
-        if not ok then ns.log:Mark("procs: restore refused -- %s", ns.Capture.Safe(err)) end
-        Swap(frame, true)
-      end
-    end
+    if ns.Store.Speaks(subject) then HideOurs(item) end
   end
 end
 
@@ -255,7 +325,7 @@ function Procs.Setting()
   local alpha = Procs.Alpha()
   if alpha == nil then return "shown" end
   if alpha <= 0 then return "HIDDEN" end
-  return string.format("DIMMED to %d%%", math.floor(alpha * 100 + 0.5))
+  return string.format("REPLACED at %d%%", math.floor(alpha * 100 + 0.5))
 end
 
 --- `<n>` takes either a percent or a fraction, because both readings of "25" are things a
@@ -271,12 +341,12 @@ end
 ns.RegisterCommand{
   name = "procs",
   args = "[on|dim|off|<n>]",
-  desc = "Blizzard's proc glow on rows this addon already speaks for",
+  desc = "Blizzard's proc glow on rows this addon already speaks for -- hide it, or replace it",
   handler = function(rest)
     local word = string.lower(string.match(rest or "", "^(%S*)"))
     if word == "" then
-      ns.Printf("Blizzard proc glows are %s on rows with a rule. "
-        .. "`/sg procs dim` fades them, `/sg procs off` hides them.", Procs.Setting())
+      ns.Printf("Blizzard proc glows are %s on rows with a rule. `/sg procs dim` swaps in "
+        .. "a quieter mark of our own, `/sg procs off` hides them outright.", Procs.Setting())
       return
     end
     local alpha
@@ -285,17 +355,14 @@ ns.RegisterCommand{
     elseif word == "off" then alpha = 0
     else alpha = AlphaFrom(word) end
     if alpha == nil then
-      ns.Print("`/sg procs on|dim|off`, or a level: `/sg procs 40`.")
+      ns.Print("`/sg procs on|dim|off`, or a level for the replacement: `/sg procs 40`.")
       return
     end
     if alpha == false then
-      -- Only a HIDDEN alert needs the client to put it back; a dimmed one restores here.
-      local wasHidden = (Procs.Alpha() or 1) <= 0
       RestoreAll()
       ns.Store.SetSetting("procAlpha", nil)
       ns.Store.SetSetting("suppressProcs", nil)
-      ns.Printf("Blizzard proc glows are now shown on rows with a rule%s.",
-        wasHidden and " -- /reload to bring back any already hidden" or "")
+      ns.Print("Blizzard proc glows are now shown on rows with a rule.")
       return
     end
     ns.Store.SetSetting("procAlpha", alpha)
