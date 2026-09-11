@@ -31,10 +31,33 @@ local function Manager()
   return mgr
 end
 
---- The three textures the alert draws with. `ProcAltGlow` is the reduced-highlight art and
---- stays hidden on a Cooldown Manager row, but it is dimmed alongside the other two rather
---- than left as the one bright thing if the client ever does show it.
-local TEXTURES = { "ProcStartFlipbook", "ProcLoopFlipbook", "ProcAltGlow" }
+--- Every region the alert frame actually draws with, ENUMERATED rather than named. The
+--- template's three flipbook keys were assumed and dimming them changed nothing, which a
+--- name-based list cannot tell apart from "those keys are not on this frame".
+local function Regions(frame)
+  local out = {}
+  if type(frame.GetRegions) ~= "function" then return out end
+  local ok, regions = pcall(function() return { frame:GetRegions() } end)
+  if ok then
+    for _, region in ipairs(regions) do out[#out + 1] = region end
+  end
+  -- Child FRAMES too. A glow drawn one level down would survive every write aimed at this
+  -- frame's own regions, and look exactly like a write that did not land.
+  local gotKids, kids = pcall(function() return { frame:GetChildren() } end)
+  if gotKids then
+    for _, kid in ipairs(kids) do out[#out + 1] = kid end
+  end
+  return out
+end
+
+--- A region's identity as the log prints it: its parent key if it has one, else its type.
+local function NameOf(frame, region)
+  for key, value in pairs(frame) do
+    if value == region and type(key) == "string" then return key end
+  end
+  local ok, kind = pcall(region.GetObjectType, region)
+  return ok and tostring(kind) or "?"
+end
 
 --- Alpha as the frame reports it, as it lands after the parent chain, and whether the region
 --- has opted out of that chain. The three together are what separate "the write was refused"
@@ -64,14 +87,18 @@ function Procs.Describe(item)
   if type(frame) ~= "table" or type(frame.GetAlpha) ~= "function" then
     return ("alert type %s, no Default frame parked"):format(tostring(kind))
   end
-  local parts = { ("alert type %s, frame %s"):format(tostring(kind), AlphaOf(frame)) }
-  for _, key in ipairs(TEXTURES) do
-    local tex = frame[key]
-    if type(tex) == "table" and type(tex.GetAlpha) == "function" then
-      local gotShown, shown = pcall(tex.IsShown, tex)
-      parts[#parts + 1] = ("%s %s shown=%s"):format(key, AlphaOf(tex),
-        gotShown and ns.Capture.Safe(shown) or "?")
+  local regions = Regions(frame)
+  local parts = { ("alert type %s, %d region(s), frame %s")
+    :format(tostring(kind), #regions, AlphaOf(frame)) }
+  for _, region in ipairs(regions) do
+    local gotShown, shown = pcall(region.IsShown, region)
+    local atlas = ""
+    if type(region.GetAtlas) == "function" then
+      local gotAtlas, name = pcall(region.GetAtlas, region)
+      if gotAtlas and name ~= nil then atlas = " " .. ns.Capture.Safe(name) end
     end
+    parts[#parts + 1] = ("%s%s %s shown=%s"):format(NameOf(frame, region), atlas,
+      AlphaOf(region), gotShown and ns.Capture.Safe(shown) or "?")
   end
   return table.concat(parts, "; ")
 end
@@ -118,12 +145,19 @@ local function ApplyTo(item)
   -- done on the textures' VERTEX colour, which is a separate channel from the alpha the two
   -- animation groups drive: `ProcLoop` repeats forever and rewrites each flipbook's alpha
   -- every cycle, and would win against a texture `SetAlpha` between our re-asserts.
-  for _, key in ipairs(TEXTURES) do
-    local tex = frame[key]
-    if type(tex) == "table" and type(tex.SetVertexColor) == "function" then
-      local tinted, why = pcall(tex.SetVertexColor, tex, 1, 1, 1, alpha)
+  for _, region in ipairs(Regions(frame)) do
+    if type(region.SetVertexColor) == "function" then
+      local tinted, why = pcall(region.SetVertexColor, region, 1, 1, 1, alpha)
       if not tinted then
-        ns.log:Mark("procs: %s SetVertexColor refused -- %s", key, ns.Capture.Safe(why))
+        ns.log:Mark("procs: %s SetVertexColor refused -- %s", NameOf(frame, region),
+          ns.Capture.Safe(why))
+      end
+    end
+    if type(region.SetAlpha) == "function" then
+      local faded, why = pcall(region.SetAlpha, region, alpha)
+      if not faded then
+        ns.log:Mark("procs: %s SetAlpha refused -- %s", NameOf(frame, region),
+          ns.Capture.Safe(why))
       end
     end
   end
@@ -188,12 +222,12 @@ local function RestoreAll()
       if frame ~= nil then
         local ok, err = pcall(frame.SetAlpha, frame, 1)
         if not ok then ns.log:Mark("procs: restore refused -- %s", ns.Capture.Safe(err)) end
-        for _, key in ipairs(TEXTURES) do
-          local tex = frame[key]
-          if type(tex) == "table" and type(tex.SetVertexColor) == "function" then
-            local tinted, why = pcall(tex.SetVertexColor, tex, 1, 1, 1, 1)
+        for _, region in ipairs(Regions(frame)) do
+          if type(region.SetVertexColor) == "function" then
+            local tinted, why = pcall(region.SetVertexColor, region, 1, 1, 1, 1)
             if not tinted then
-              ns.log:Mark("procs: %s restore refused -- %s", key, ns.Capture.Safe(why))
+              ns.log:Mark("procs: %s restore refused -- %s", NameOf(frame, region),
+                ns.Capture.Safe(why))
             end
           end
         end

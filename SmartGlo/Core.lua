@@ -147,7 +147,7 @@ loader:SetScript("OnEvent", function()
   ns.Rules.PrimeTalents()
   ns.Attach.Start()
   ns.Count.Start()
-  ns.Print("loaded -- /sg help")
+  ns.Printf("%s loaded -- /sg help", tostring(ns.version))
   ns.log:Mark("login -- SmartGlo %s", ns.Capture.Safe(ns.version))
   -- The generated symbol table against the client, which is the only authority for id -> name.
   -- Silent unless a row disagrees; `/sg symbols` is the same sweep with a summary.
