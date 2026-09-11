@@ -164,6 +164,10 @@ local function ApplyTo(item)
   -- quietly: hide the two flipbooks, show `ProcAltGlow`. That is exactly what Blizzard does
   -- for a downgraded alert `[T1 src @12.1.0: ActionButtonSpellAlerts.lua:57-65]`. No animation
   -- drives that texture, so alpha DOES hold on it and still gives a dial within the quiet art.
+  -- The FRAME goes back to full: the dial lives on the quiet texture, and a frame left at
+  -- whatever alpha a previous setting wrote would hide the art we just swapped in.
+  local shown, why = pcall(frame.SetAlpha, frame, 1)
+  if not shown then ns.log:Mark("procs: frame alpha refused -- %s", ns.Capture.Safe(why)) end
   Swap(frame, false)
   local glow = frame.ProcAltGlow
   if type(glow) == "table" and type(glow.SetAlpha) == "function" then
