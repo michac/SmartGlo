@@ -98,12 +98,39 @@ local function InfoFor(cooldownID)
 end
 
 --- A subject is the spell the icon is SHOWING, override included -- what the player sees.
-local function BoundSpell(info)
+--- ⚠ Two ids name the same ABILITY when the client gives them the same display name -- a
+--- talent variant of one spell, like the three Sigils of Flame or the two Lay on Hands. A rule
+--- must be able to say that ability's name and attach whichever variant the player's build
+--- produces, so the row answers to both ids.
+---
+--- A TRANSFORM is the other shape: Judgment becomes Hammer of Wrath, Hand of Gul'dan becomes
+--- Ruination. Those are different abilities on one row and must stay different subjects, or a
+--- rung written about the base would light over art showing the replacement.
+local function SameAbility(a, b)
+  local gotA, nameA = pcall(C_Spell.GetSpellName, a)
+  if not gotA or type(nameA) ~= "string" then return false end
+  local gotB, nameB = pcall(C_Spell.GetSpellName, b)
+  if not gotB or type(nameB) ~= "string" then return false end
+  return nameA == nameB
+end
+
+--- Every id this row answers to, the one the client is showing FIRST.
+local function BoundSpells(info)
+  local base = type(info.spellID) == "number" and info.spellID or nil
+  local over = nil
   if type(info.overrideSpellID) == "number" and info.overrideSpellID ~= 0 then
-    return info.overrideSpellID
+    over = info.overrideSpellID
   end
-  if type(info.spellID) == "number" then return info.spellID end
-  return nil
+  if over == nil or over == base then
+    if base == nil then return {} end
+    return { base }
+  end
+  if base ~= nil and SameAbility(over, base) then return { over, base } end
+  return { over }
+end
+
+local function BoundSpell(info)
+  return BoundSpells(info)[1]
 end
 
 local function InfoCarriesAura(info, auraSpellID)
@@ -353,11 +380,12 @@ local function Flush()
         if id ~= nil then
           local info = InfoFor(id)
           if info ~= nil then
-            local spell = BoundSpell(info)
-            if spell ~= nil and subjects[spell] and bound[spell] == nil then
-              bound[spell] = item
-              ns.Overlay.Anchor(ns.Overlay.For(spell), item)
-              matched = matched + 1
+            for _, spell in ipairs(BoundSpells(info)) do
+              if subjects[spell] and bound[spell] == nil then
+                bound[spell] = item
+                ns.Overlay.Anchor(ns.Overlay.For(spell), item)
+                matched = matched + 1
+              end
             end
             for aura in pairs(wanted) do
               if InfoCarriesAura(info, aura) then
@@ -599,11 +627,17 @@ end
 
 --- Which subject an item frame is currently showing -- the reverse of `bound`, walked rather
 --- than kept, because a second table keyed the other way is a second thing to invalidate.
+--- A row answering to two ids has two subjects, and the caller wants the one a rule is written
+--- about -- asking "does this addon speak for this row" of the other id answers no.
 function Attach.SubjectOf(item)
+  local any = nil
   for subject, bound_item in pairs(bound) do
-    if bound_item == item then return subject end
+    if bound_item == item then
+      if ns.Store.Speaks(subject) then return subject end
+      any = subject
+    end
   end
-  return nil
+  return any
 end
 
 function Attach.ReportStatus()

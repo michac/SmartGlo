@@ -370,12 +370,12 @@ Profiles.list = {
       {
         name = "Blessed Hammer on Blessed Assurance",
         subject = 204019,
-        when = { t = "aura", spell = 433015 },
+        bind = { family = "presence", aura = 433015, unit = "player", filter = "HELPFUL" },
       },
       {
         name = "Hammer of the Righteous on Blessed Assurance",
         subject = 53595,
-        when = { t = "aura", spell = 433015 },
+        bind = { family = "presence", aura = 433015, unit = "player", filter = "HELPFUL" },
       },
       {
         name = "Consecration when you are not in it",
@@ -553,7 +553,7 @@ Profiles.list = {
       },
       {
         name = "Lay on Hands when nearly dead",
-        subject = 471195,
+        subject = 633,
         when = { t = "and", terms = {
             { t = "and", terms = {
                 { t = "and", terms = {

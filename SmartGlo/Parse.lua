@@ -221,12 +221,12 @@ end
 --- Both container-backed binds name an aura rather than an ability, and neither reads through
 --- a Cooldown Manager row -- so the tracked names answer first and the ability inventory is
 --- the fallback, not a different meaning.
+--- ⚠ NO fallback to the ability table. The two namespaces are different on purpose -- the
+--- aura table is the CDM's tracked categories, which is the whole set an `aura()` term or a
+--- sealed aura bind can ever latch -- so an ability id armed here raises no alert and lights
+--- nothing, with no refusal to say why. A name that is not an aura is an error, not a guess.
 local function ResolveAura(text, scope)
-  local id, why = ns.Names.Resolve(text, scope, "aura")
-  if id ~= nil then return id end
-  local fallback = ns.Names.Resolve(text, scope, "ability")
-  if fallback ~= nil then return fallback end
-  return nil, why
+  return ns.Names.Resolve(text, scope, "aura")
 end
 
 local function ParseBind(text, scope)
