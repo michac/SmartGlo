@@ -78,9 +78,16 @@ end
 --- client handed back -- once, and again only when it changes. `<secret>` means the curve was
 --- evaluated and the client owns the alpha. A plain NUMBER means it did not seal, and then
 --- the number says which scale the input is on, which no eyeball can report.
+---
+--- Keyed by the GLOW and not by the entry: `Refresh` rebuilds every entry from scratch and is
+--- called from each attach evaluation, so a memory living on the entry is new every time and
+--- dedups nothing. That flooded the capture ring and evicted everything worth reading.
+local lastClass = setmetatable({}, { __mode = "k" })
+local lastArmed = nil
+
 local function Class(entry, text)
-  if entry.lastClass == text then return end
-  entry.lastClass = text
+  if lastClass[entry.glow] == text then return end
+  lastClass[entry.glow] = text
   ns.log:Mark("health %s %s -> %s", ns.Capture.Safe(ns.Rules.Label(entry.glow.subject)),
     ns.Capture.Safe(ns.Rules.DescribeBind(entry.glow.bind)), text)
 end
@@ -124,11 +131,16 @@ function Health.Refresh()
       end
     end
   end
-  if owned > 0 and missing ~= nil then
-    ns.log:Line("health binds UNAVAILABLE -- %s is absent; %d mark(s) stay dark",
-      ns.Capture.Safe(missing), owned)
-  elseif owned > 0 then
-    ns.log:Line("health binds armed: %d", owned)
+  -- Also on change only, and for the same reason: this runs on every evaluation.
+  local armed = ("%s/%s"):format(tostring(missing), owned)
+  if armed ~= lastArmed then
+    lastArmed = armed
+    if owned > 0 and missing ~= nil then
+      ns.log:Mark("health binds UNAVAILABLE -- %s is absent; %d mark(s) stay dark",
+        ns.Capture.Safe(missing), owned)
+    elseif owned > 0 then
+      ns.log:Mark("health binds armed: %d", owned)
+    end
   end
   if #active > 0 then
     if ticker == nil then ticker = C_Timer.NewTicker(INTERVAL, Tick) end

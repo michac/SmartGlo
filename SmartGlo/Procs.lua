@@ -86,7 +86,19 @@ local function ApplyTo(item)
   local frame = AlertFrame(item)
   if frame == nil then return end
   local ok, err = pcall(frame.SetAlpha, frame, alpha)
-  if not ok then ns.log:Mark("procs: SetAlpha refused -- %s", ns.Capture.Safe(err)) end
+  if not ok then
+    ns.log:Mark("procs: SetAlpha refused -- %s", ns.Capture.Safe(err))
+    return
+  end
+  -- Read straight back. A write that is accepted and then reads as something else is the one
+  -- failure the frame cannot be asked about later -- by the time anyone looks, a refresh has
+  -- been through. Logged only when it disagrees, so a working dial stays silent.
+  local got, back = pcall(frame.GetAlpha, frame)
+  if not got then
+    ns.log:Mark("procs: GetAlpha refused -- %s", ns.Capture.Safe(back))
+  elseif type(back) ~= "number" or math.abs(back - alpha) > 0.01 then
+    ns.log:Mark("procs: set alpha %.2f, frame reads back %s", alpha, ns.Capture.Safe(back))
+  end
 end
 
 --- Why this hook did nothing, recorded on CHANGE. `RefreshOverlayGlow` fires many times a
