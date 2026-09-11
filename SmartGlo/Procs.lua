@@ -196,36 +196,67 @@ local function OurAlert(item)
   return built
 end
 
---- The birth animation is played by hand: the template registers `OnShow` against `OnHide`,
---- so the mixin's own replay never fires `[T1 src @12.1.0: ActionButtonSpellAlerts.xml:34-38]`.
+--- The loop is played by hand, and the birth is skipped outright. `ProcLoopFlipbook` ships at
+--- alpha 0 and only the loop's own first element raises it, so a frame that is merely shown
+--- draws NOTHING -- and the mixin's replay cannot be relied on, because the template registers
+--- its `OnShow` handler against the `OnHide` script `[T1 src @12.1.0:
+--- ActionButtonSpellAlerts.xml:13, 22-26, 34-38]`. Skipping the birth is also the quieter
+--- reading, and it is what the Cooldown Manager itself asks for on a refresh
+--- `[T1 src @12.1.0: CooldownViewer.lua:1237-1238]`.
 local function ShowOurs(item, alpha)
   local frame = OurAlert(item)
   if frame == nil then return end
   local set, why = pcall(frame.SetAlpha, frame, alpha)
   if not set then ns.log:Mark("procs: our alpha refused -- %s", ns.Capture.Safe(why)) end
   local gotShown, shown = pcall(frame.IsShown, frame)
-  if gotShown and shown then return end
-  local ok, err = pcall(function()
-    frame:Show()
-    frame.ProcStartAnim:Play()
-  end)
-  if not ok then ns.log:Mark("procs: our alert show refused -- %s", ns.Capture.Safe(err)) end
+  if not (gotShown and shown) then
+    local ok, err = pcall(frame.Show, frame)
+    if not ok then ns.log:Mark("procs: our alert show refused -- %s", ns.Capture.Safe(err)) end
+  end
+  local gotLoop, playing = pcall(frame.ProcLoop.IsPlaying, frame.ProcLoop)
+  if gotLoop and playing then return end
+  local ok, err = pcall(frame.ProcLoop.Play, frame.ProcLoop)
+  if not ok then ns.log:Mark("procs: our loop refused -- %s", ns.Capture.Safe(err)) end
 end
 
 local function HideOurs(item)
   local frame = ours[item]
   if frame == nil then return end
+  local gotShown, shown = pcall(frame.IsShown, frame)
+  if gotShown and not shown then return end
   local ok, err = pcall(function()
-    frame.ProcStartAnim:Stop()
     frame.ProcLoop:Stop()
     frame:Hide()
   end)
   if not ok then ns.log:Mark("procs: our alert hide refused -- %s", ns.Capture.Safe(err)) end
 end
 
-local function ApplyTo(item)
+--- Whether the client wants a proc glow here, asked of the client. This is the same read
+--- `RefreshOverlayGlow` makes before it decides `[T1 src @12.1.0: CooldownViewer.lua:1241-1242]`,
+--- so it stays true while the proc is up and does not go dark the moment we take the alert
+--- away. The remembered answer is the fallback for a refused read, never the primary.
+local function Overlayed(item, subject)
+  local id = subject
+  if type(item.GetSpellID) == "function" then
+    local gotID, own = pcall(item.GetSpellID, item)
+    if gotID and type(own) == "number" then id = own end
+  end
+  if type(id) ~= "number" then return wanted[item] == true end
+  local ok, on = pcall(C_SpellActivationOverlay.IsSpellOverlayed, id)
+  if not ok then
+    ns.log:Mark("procs: IsSpellOverlayed refused -- %s", ns.Capture.Safe(on))
+    return wanted[item] == true
+  end
+  return on == true
+end
+
+--- ⚠ The hide is UNCONDITIONAL whenever the dial is set. It is the one channel that has
+--- always worked, it runs from the evaluation pass rather than from the hook, and putting any
+--- remembered flag in front of it is what broke `off`. `HideAlert` on a row with no alert is
+--- already a no-op, so there is nothing to guard against.
+local function ApplyTo(item, subject)
   local alpha = Procs.Alpha()
-  if alpha == nil or not wanted[item] then
+  if alpha == nil then
     HideOurs(item)
     return
   end
@@ -234,7 +265,7 @@ local function ApplyTo(item)
     local ok, err = pcall(mgr.HideAlert, mgr, item)
     if not ok then ns.log:Mark("procs: HideAlert refused -- %s", ns.Capture.Safe(err)) end
   end
-  if alpha <= 0 then
+  if alpha <= 0 or not Overlayed(item, subject) then
     HideOurs(item)
     return
   end
@@ -269,19 +300,17 @@ local function OnRefresh(item)
     return
   end
   local mgr = Manager()
-  if mgr == nil then
-    Reason(item, "no alert manager")
-    return
+  if mgr ~= nil then
+    -- Read BEFORE `ApplyTo`, which hides the alert and with it the answer.
+    local ok, has = pcall(mgr.HasAlert, mgr, item)
+    if not ok then
+      ns.log:Mark("procs: HasAlert refused -- %s", ns.Capture.Safe(has))
+    else
+      wanted[item] = has == true
+    end
   end
-  -- Read BEFORE `ApplyTo`, which hides the alert and with it the answer.
-  local ok, has = pcall(mgr.HasAlert, mgr, item)
-  if not ok then
-    Reason(item, "HasAlert refused -- " .. ns.Capture.Safe(has))
-    return
-  end
-  wanted[item] = has == true
   Reason(item, ("applying to %s"):format(ns.SpellLabel(subject)))
-  ApplyTo(item)
+  ApplyTo(item, subject)
 end
 
 --- Hooked once, on the mixins rather than the frames: an item frame is pooled and a hook on
@@ -315,7 +344,7 @@ end
 function Procs.Refresh()
   if not Procs.Enabled() then return end
   for subject, item in pairs(ns.Attach.Bound()) do
-    if ns.Store.Speaks(subject) then ApplyTo(item) end
+    if ns.Store.Speaks(subject) then ApplyTo(item, subject) end
   end
 end
 

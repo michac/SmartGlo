@@ -53,6 +53,10 @@ stds.wow = {
     "C_CooldownViewer",
     "EventRegistry",
 
+    -- Procs.lua — the client's own read of whether a spell is procced, asked before we
+    -- decide whether to draw the replacement glow.
+    "C_SpellActivationOverlay",
+
     -- Capture.lua — the readability classes and the session timestamp.
     "issecrettable",
     "date",
