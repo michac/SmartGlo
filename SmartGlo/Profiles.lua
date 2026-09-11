@@ -292,8 +292,9 @@ Profiles.list = {
   -- active-mitigation loop. Same contract as the other profiles: a lit icon is a rung whose
   -- readable conditions hold, not an instruction, and several light at once.
   --
-  -- ⚠ GENERATED FROM `rules/protection-lightsmith.sg` through the parser, so the twin cannot
-  -- drift from the file. Edit the .sg and re-render; do not hand-edit the table.
+  -- ⚠ The twin of `rules/protection-lightsmith.sg`. Nothing regenerates it on a build: what
+  -- holds the two together is `Parse.Render` equality, so edit the .sg and re-render rather
+  -- than hand-editing here.
   ["protection-lightsmith"] = {
     label = "Protection — Lightsmith",
     glows = {
@@ -346,6 +347,12 @@ Profiles.list = {
         name = "Judgment at cap",
         subject = 275779,
         when = { t = "at_max_charges", spell = 275779 },
+        urgent = true,
+      },
+      {
+        name = "Hammer of Wrath inside Sentinel",
+        subject = 1241413,
+        when = { t = "ready", spell = 1241413 },
         urgent = true,
       },
       {
@@ -447,8 +454,10 @@ Profiles.list = {
       {
         name = "Divine Toll inside Sentinel",
         subject = 375576,
-        when = { t = "ready", spell = 375576 },
-        bind = { family = "presence", aura = 389539, unit = "player", filter = "HELPFUL" },
+        when = { t = "and", terms = {
+            { t = "ready", spell = 375576 },
+            { t = "active", spell = 389539 },
+          } },
       },
       {
         name = "Consecration at five Divine Guidance",

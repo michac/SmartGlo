@@ -31,6 +31,25 @@ local function Manager()
   return mgr
 end
 
+--- What the client's alert on this row is doing right now, in the words `/sg rows` prints
+--- and this module logs when it declines to touch one. Blank is not an outcome: every path
+--- through here names itself.
+function Procs.Describe(item)
+  local mgr = Manager()
+  if mgr == nil then return "no alert manager" end
+  if type(mgr.HasAlert) ~= "function" then return "manager has no HasAlert" end
+  local ok, has, kind = pcall(mgr.HasAlert, mgr, item)
+  if not ok then return "HasAlert refused -- " .. ns.Capture.Safe(has) end
+  if not has then return "no alert" end
+  local frame = item.SpellActivationAlert
+  if type(frame) ~= "table" or type(frame.GetAlpha) ~= "function" then
+    return ("alert type %s, no Default frame parked"):format(tostring(kind))
+  end
+  local gotAlpha, alpha = pcall(frame.GetAlpha, frame)
+  if not gotAlpha then return "GetAlpha refused -- " .. ns.Capture.Safe(alpha) end
+  return ("alert type %s, alpha %.2f"):format(tostring(kind), alpha)
+end
+
 --- Blizzard parks the frame on the button itself for a Default alert, and a CDM row can only
 --- take a Default one: the AssistedCombatRotation branch needs `actionButton.action`, which a
 --- cooldown viewer item does not have `[T1 src @12.1.0: ActionButtonSpellAlerts.lua:117-123]`.
@@ -70,26 +89,54 @@ local function ApplyTo(item)
   if not ok then ns.log:Mark("procs: SetAlpha refused -- %s", ns.Capture.Safe(err)) end
 end
 
+--- Why this hook did nothing, recorded on CHANGE. `RefreshOverlayGlow` fires many times a
+--- second, so a line per call would bury the transition that matters; a line per new reason
+--- is the whole story and is what tells a hook that never fires from one that bails.
+local lastReason = setmetatable({}, { __mode = "k" })
+
+local function Reason(item, why)
+  if lastReason[item] == why then return end
+  lastReason[item] = why
+  ns.log:Mark("procs: %s -- %s", why, ns.Capture.Safe(Procs.Describe(item)))
+end
+
 --- Post-hooks run AFTER `ShowAlert`, so this is a re-assert rather than a prevention. There is
 --- no earlier seam -- the show is an unconditional call inside a method we do not own.
 local function OnRefresh(item)
-  if not Procs.Enabled() then return end
+  if not Procs.Enabled() then
+    Reason(item, "off")
+    return
+  end
   local subject = ns.Attach.SubjectOf(item)
-  if subject == nil or not ns.Store.Speaks(subject) then return end
+  if subject == nil then
+    Reason(item, "row not bound to any subject")
+    return
+  end
+  if not ns.Store.Speaks(subject) then
+    Reason(item, ("no rule on %s"):format(ns.SpellLabel(subject)))
+    return
+  end
+  Reason(item, ("applying to %s"):format(ns.SpellLabel(subject)))
   ApplyTo(item)
 end
 
 --- Hooked once, on the mixins rather than the frames: an item frame is pooled and a hook on
---- one dies with its acquire, while the mixin is the table every frame inherits.
+--- one dies with its acquire, while the mixin is the table every frame inherits. A frame
+--- copies the mixin's methods when it is created, so a hook only reaches frames made after
+--- it -- which is why the count is logged rather than assumed.
 function Procs.InstallHooks(mixinNames)
   if hooked then return end
   hooked = true
+  local names = {}
   for _, name in ipairs(mixinNames) do
     local mixin = _G[name]
     if type(mixin) == "table" and type(mixin.RefreshOverlayGlow) == "function" then
       hooksecurefunc(mixin, "RefreshOverlayGlow", OnRefresh)
+      names[#names + 1] = name
     end
   end
+  ns.log:Mark("procs: RefreshOverlayGlow hooked on %d of %d mixins -- %s",
+    #names, #mixinNames, #names > 0 and table.concat(names, ", ") or "none")
 end
 
 --- Put every alert back to full. A dimmed one restores exactly; a HIDDEN one cannot be
