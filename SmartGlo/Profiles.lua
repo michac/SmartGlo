@@ -55,9 +55,13 @@ Profiles.list = {
         name = "Tyrant at five shards",
         subject = 265187,
         when = { t = "and", terms = {
-            { t = "ready", spell = 265187 },
-            { t = "not", term = { t = "ready", spell = 104316 } },
-            { t = "not", term = { t = "ready", spell = 1276452 } },
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "ready", spell = 265187 },
+                    { t = "not", term = { t = "ready", spell = 104316 } },
+                  } },
+                { t = "not", term = { t = "ready", spell = 1276452 } },
+              } },
             { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
           } },
       },
@@ -157,8 +161,10 @@ Profiles.list = {
         name = "Dreadstalkers into the Tyrant window",
         subject = 104316,
         when = { t = "and", terms = {
-            { t = "talent", spell = 1276748 },
-            { t = "ready", spell = 104316 },
+            { t = "and", terms = {
+                { t = "talent", spell = 1276748 },
+                { t = "ready", spell = 104316 },
+              } },
             { t = "not", term = { t = "ready", spell = 265187 } },
           } },
         bind = { family = "duration", spell = 265187, cmp = "<", seconds = 12 },
@@ -167,8 +173,10 @@ Profiles.list = {
         name = "Dreadstalkers with Tyrant ready",
         subject = 104316,
         when = { t = "and", terms = {
-            { t = "talent", spell = 1276748 },
-            { t = "ready", spell = 104316 },
+            { t = "and", terms = {
+                { t = "talent", spell = 1276748 },
+                { t = "ready", spell = 104316 },
+              } },
             { t = "ready", spell = 265187 },
           } },
       },
