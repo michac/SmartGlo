@@ -79,6 +79,19 @@ ns.RegisterCommand{
   desc = "what is loaded, and what is attached right now",
   handler = function()
     ns.Print("loaded.")
+    -- Whether the snapshot binding took, and to what. A binding that never loaded and one
+    -- whose key another binding swallows look identical from the keyboard, and they are not
+    -- the same problem: the first is ours to fix, the second is a key to change.
+    if GetBindingKey ~= nil then
+      local ok, key = pcall(GetBindingKey, "SMARTGLO_WHY_LOG")
+      if ok and key ~= nil then
+        ns.Printf("snapshot key: %s -- if pressing it does nothing, another binding owns it "
+          .. "(Esc > Key Bindings, search that key).", key)
+      else
+        ns.Print("snapshot key: UNBOUND -- Esc > Key Bindings > Smart Glo. If no Smart Glo "
+          .. "section is listed, Bindings.xml did not load and that is ours to fix.")
+      end
+    end
     ns.Attach.ReportStatus()
     ns.Count.ReportStatus()
   end,

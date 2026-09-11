@@ -39,8 +39,10 @@ stds.wow = {
     "CreateTextureMarkup",
     "GetTime",
 
-    -- Core.lua — the session stamps the capture log carries: which spec it was taken on.
+    -- Core.lua — the session stamps the capture log carries: which spec it was taken on, and
+    -- the reader that tells an unbound key apart from one another binding swallows.
     "C_SpecializationInfo",
+    "GetBindingKey",
 
     -- Overlay.lua / Config.lua — our own frames hang off the screen, never off a CDM icon.
     "UIParent",
