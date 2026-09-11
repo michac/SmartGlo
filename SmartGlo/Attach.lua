@@ -256,6 +256,68 @@ local function Detach()
   bound = {}
 end
 
+--- Every laid-out row, as the client keys it. The subject is the OVERRIDE id when one is
+--- set, so a proc that swaps a row's spell moves it out from under the base spell's rules --
+--- and this is the only place that id can be read off. The alert column is the proc glow's
+--- own state, which is what tells "the dimming did nothing" from "nothing procced".
+--- The fingerprint is row IDENTITY only -- viewer, spell, override. The alert state is left
+--- out of it on purpose: that changes several times a second, and a fingerprint carrying it
+--- would reprint the whole inventory constantly and bury the override swap that matters.
+local function Rows()
+  local lines, ident = {}, {}
+  local subjects = {}
+  for _, subject in ipairs(ns.Store.Subjects()) do subjects[subject] = true end
+  local count = 0
+  for _, entry in ipairs(Viewers()) do
+    local viewer = entry[1]
+    local name = viewer:GetName() or "?"
+    local iter = ActiveFrames(viewer)
+    if iter ~= nil then
+      for item in iter do
+        count = count + 1
+        local id = CooldownIDOf(item)
+        local info = id ~= nil and InfoFor(id) or nil
+        if info == nil then
+          lines[#lines + 1] = ("%s  cooldownID %s -- no viewer info"):format(name, tostring(id))
+          ident[#ident + 1] = ("%s/%s/-"):format(name, tostring(id))
+        else
+          local spell = BoundSpell(info)
+          local over = ""
+          if type(info.overrideSpellID) == "number" and info.overrideSpellID ~= 0
+             and info.overrideSpellID ~= info.spellID then
+            over = (" override %s"):format(ns.SpellLabel(info.overrideSpellID))
+          end
+          local rule = "no rule"
+          if spell ~= nil and subjects[spell] then
+            rule = bound[spell] == item and "RULE, bound" or "rule, not bound here"
+          end
+          lines[#lines + 1] = ("%s  %s%s -- %s, %s%s"):format(name,
+            ns.SpellLabel(info.spellID), over, rule, ns.Procs.Describe(item),
+            IsShowing(item) and "" or ", hidden")
+          ident[#ident + 1] = ("%s/%s/%s"):format(name, tostring(info.spellID),
+            tostring(info.overrideSpellID))
+        end
+      end
+    end
+  end
+  table.insert(lines, 1, ("SmartGlo %s -- %d laid-out row(s) across %d viewer(s)")
+    :format(tostring(ns.version), count, #Viewers()))
+  return lines, table.concat(ident, " ")
+end
+
+--- Written to the capture whenever the row set CHANGES, so the inventory is already on disk
+--- when a row misbehaves. Nobody has to notice in the moment and go fetch it.
+local lastRowsIdent = nil
+
+local function LogRows()
+  local lines, ident = Rows()
+  if ident == lastRowsIdent then return end
+  lastRowsIdent = ident
+  ns.log:Mark("---- rows ----")
+  for _, line in ipairs(lines) do ns.log:Mark("%s", ns.Capture.Safe(line)) end
+end
+
+
 local function Flush()
   flushQueued = false
   if not dirty then return end
@@ -313,6 +375,7 @@ local function Flush()
         ns.Capture.Safe(ns.Rules.Label(subject)))
     end
   end
+  LogRows()
   -- REBUILD, not re-anchor: an occluder is cropped from the icon the row is drawing and
   -- sized in that row's own units, so a rebind or a resize needs a new container rather
   -- than a moved one. Rebuild is keyed and idempotent, so an unchanged row costs nothing.
@@ -598,66 +661,18 @@ local function Report(only)
   return lines
 end
 
---- Every laid-out row, as the client keys it. The subject is the OVERRIDE id when one is
---- set, so a proc that swaps a row's spell moves it out from under the base spell's rules --
---- and this is the only place that id can be read off. The alert column is the proc glow's
---- own state, which is what tells "the dimming did nothing" from "nothing procced".
-local function Rows()
-  local lines = {}
-  local subjects = {}
-  for _, subject in ipairs(ns.Store.Subjects()) do subjects[subject] = true end
-  local count = 0
-  for _, entry in ipairs(Viewers()) do
-    local viewer = entry[1]
-    local name = viewer:GetName() or "?"
-    local iter = ActiveFrames(viewer)
-    if iter ~= nil then
-      for item in iter do
-        count = count + 1
-        local id = CooldownIDOf(item)
-        local info = id ~= nil and InfoFor(id) or nil
-        if info == nil then
-          lines[#lines + 1] = ("%s  cooldownID %s -- no viewer info"):format(name, tostring(id))
-        else
-          local spell = BoundSpell(info)
-          local over = ""
-          if type(info.overrideSpellID) == "number" and info.overrideSpellID ~= 0
-             and info.overrideSpellID ~= info.spellID then
-            over = (" override %s"):format(ns.SpellLabel(info.overrideSpellID))
-          end
-          local rule = "no rule"
-          if spell ~= nil and subjects[spell] then
-            rule = bound[spell] == item and "RULE, bound" or "rule, not bound here"
-          end
-          lines[#lines + 1] = ("%s  %s%s -- %s, %s%s"):format(name,
-            ns.SpellLabel(info.spellID), over, rule, ns.Procs.Describe(item),
-            IsShowing(item) and "" or ", hidden")
-        end
-      end
-    end
-  end
-  table.insert(lines, 1, ("SmartGlo %s -- %d laid-out row(s) across %d viewer(s)")
-    :format(tostring(ns.version), count, #Viewers()))
-  return lines
-end
-
+--- Reading it yourself, for when you want it now. There is no `log` verb: the flush already
+--- writes this inventory to the capture every time the row set changes, so the transition is
+--- recorded whether or not anyone was watching.
 ns.RegisterCommand{
   name = "rows",
-  args = "[copy|log]",
+  args = "[copy]",
   desc = "every laid-out Cooldown Manager row, its override id and its proc-alert state",
   handler = function(rest)
-    local word = string.match(rest or "", "^(%S*)")
     local lines = Rows()
-    if word == "copy" then
+    if string.match(rest or "", "^(%S*)") == "copy" then
       ns.Config.ShowText("Every laid-out Cooldown Manager row. Ctrl+C to copy.",
         table.concat(lines, "\n"))
-      return
-    end
-    if word == "log" then
-      ns.log:Mark("---- /sg rows ----")
-      for _, line in ipairs(lines) do ns.log:Mark("%s", ns.Capture.Safe(line)) end
-      ns.Printf("%d line(s) written to the attach capture. /reload to flush, then read it "
-        .. "with: uv run python -m wowkb.capture sg attach", #lines)
       return
     end
     for _, line in ipairs(lines) do ns.Print(line) end
