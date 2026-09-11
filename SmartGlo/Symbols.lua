@@ -5261,6 +5261,7 @@ Symbols.specNames = {
     [444010] = "death_charge_444010",
     [455993] = "frostbane_455993",
     [461621] = "raise_ally_461621",
+    [1228433] = "frostbane_1228433",
     [1228436] = "frostbane_1228436",
     [1265384] = "frostwyrms_fury_1265384",
   },
@@ -5275,6 +5276,7 @@ Symbols.specNames = {
   },
   ["demon_hunter.devourer"] = {
     [202140] = "sigil_of_misery_202140",
+    [204513] = "sigil_of_flame_204513",
     [204596] = "sigil_of_flame_204596",
     [332544] = "imprison_332544",
     [389810] = "sigil_of_flame_389810",
@@ -5285,6 +5287,7 @@ Symbols.specNames = {
   },
   ["demon_hunter.havoc"] = {
     [202140] = "sigil_of_misery_202140",
+    [204513] = "sigil_of_flame_204513",
     [204596] = "sigil_of_flame_204596",
     [332544] = "imprison_332544",
     [389810] = "sigil_of_flame_389810",
@@ -5296,6 +5299,7 @@ Symbols.specNames = {
     [202140] = "sigil_of_misery_202140",
     [204513] = "sigil_of_flame_204513",
     [207665] = "sigil_of_chains_207665",
+    [207682] = "sigil_of_silence_207682",
     [332544] = "imprison_332544",
     [389807] = "sigil_of_chains_389807",
     [389809] = "sigil_of_silence_389809",
@@ -5443,7 +5447,9 @@ Symbols.specNames = {
   },
   ["priest.discipline"] = {
     [2006] = "resurrection_2006",
+    [123040] = "mindbender_123040",
     [200174] = "mindbender_200174",
+    [213109] = "resurrection_213109",
     [317434] = "resurrection_317434",
     [336471] = "leap_of_faith_336471",
     [450215] = "void_blast_450215",
@@ -5454,6 +5460,7 @@ Symbols.specNames = {
   },
   ["priest.holy"] = {
     [2006] = "resurrection_2006",
+    [213109] = "resurrection_213109",
     [317434] = "resurrection_317434",
     [336471] = "leap_of_faith_336471",
     [461530] = "resurrection_461530",
@@ -5461,8 +5468,10 @@ Symbols.specNames = {
   },
   ["priest.shadow"] = {
     [2006] = "resurrection_2006",
+    [123040] = "mindbender_123040",
     [194249] = "voidform_194249",
     [200174] = "mindbender_200174",
+    [213109] = "resurrection_213109",
     [317434] = "resurrection_317434",
     [336471] = "leap_of_faith_336471",
     [450215] = "void_blast_450215",
@@ -5534,6 +5543,35 @@ Symbols.specNames = {
     [281000] = "execute_281000",
     [316593] = "intimidating_shout_316593",
     [1271980] = "champions_spear_1271980",
+  },
+}
+
+--- Slugs naming two ids that rank EQUALLY as a subject, per spec. Left out of the
+--- names above on purpose -- which one is live depends on the player's talents and
+--- no offline pass can tell -- and carried here so the refusal names the candidates.
+Symbols.abilityAmbiguous = {
+  ["death_knight.frost"] = {
+    ["frostbane"] = { 1228433, 1228436, },
+  },
+  ["demon_hunter.devourer"] = {
+    ["sigil_of_flame"] = { 204513, 389810, },
+  },
+  ["demon_hunter.havoc"] = {
+    ["sigil_of_flame"] = { 204513, 389810, },
+  },
+  ["demon_hunter.vengeance"] = {
+    ["sigil_of_silence"] = { 207682, 389809, },
+  },
+  ["priest.discipline"] = {
+    ["mindbender"] = { 123040, 200174, },
+    ["resurrection"] = { 213109, 317434, 461530, },
+  },
+  ["priest.holy"] = {
+    ["resurrection"] = { 213109, 317434, 461530, },
+  },
+  ["priest.shadow"] = {
+    ["mindbender"] = { 123040, 200174, },
+    ["resurrection"] = { 213109, 317434, 461530, },
   },
 }
 

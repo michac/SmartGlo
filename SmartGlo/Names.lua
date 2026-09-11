@@ -92,6 +92,19 @@ local function ResolveSuffixed(key, text, kind)
   return nil, ("%d is %s in %s, not %q"):format(id, tostring(full), key, text)
 end
 
+--- Why a bare name is not in the ABILITY table: two ids of this spec rank equally as a
+--- subject, so which one a build produces is a talent question no offline pass can answer.
+--- Naming one of them is the author's call and is spelled `<slug>_<id>`.
+local function Refusal(key, bare)
+  local by_spec = ns.Symbols.abilityAmbiguous and ns.Symbols.abilityAmbiguous[key]
+  local ids = by_spec and by_spec[bare]
+  if ids == nil then return ("%s has no %q"):format(key, bare) end
+  local parts = {}
+  for _, id in ipairs(ids) do parts[#parts + 1] = ("%s_%d"):format(bare, id) end
+  return ("%q names %d equally good spells in %s and which one your talents produce cannot "
+    .. "be known here; write one of %s"):format(bare, #ids, key, table.concat(parts, ", "))
+end
+
 --- Why a bare name is not in the aura table: it may name two tracked rows rather than none,
 --- and then the ids are what the author has to choose between.
 local function AuraRefusal(key, bare)
@@ -159,7 +172,7 @@ function Names.Resolve(text, scope, kind)
       if suffixed ~= nil then return suffixed end
       if mismatch ~= nil then return nil, mismatch end
       if kind == "aura" then return nil, AuraRefusal(key, bare) end
-      return nil, ("%s has no %q"):format(key, bare)
+      return nil, Refusal(key, bare)
     end
     return id
   end
@@ -178,7 +191,7 @@ function Names.Resolve(text, scope, kind)
     if suffixed ~= nil then return suffixed end
     if mismatch ~= nil then return nil, mismatch end
     if kind == "aura" then return nil, AuraRefusal(scope, text) end
-    return nil, ("%s has no %q"):format(scope, text)
+    return nil, Refusal(scope, text)
   end
   return id
 end
