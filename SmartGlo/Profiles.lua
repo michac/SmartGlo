@@ -39,17 +39,27 @@ Profiles.list = {
   -- addon cannot read dropped -- so a lit icon means "this line's readable conditions hold",
   -- never "cast this now": priority ORDER is not expressible and is not claimed.
   --
-  -- Two subjects are OVERRIDE ids. Ruination replaces Hand of Gul'dan and Infernal Bolt
-  -- replaces Shadow Bolt while their proc is up, so each glow attaches only in the window it
-  -- is about -- which is why neither carries a gate of its own.
+  -- Two subjects are OVERRIDE ids. Ruination (428522) replaces Hand of Gul'dan and Infernal
+  -- Bolt (434506) replaces Shadow Bolt while their proc is up, so a glow on an override id
+  -- attaches only in the window it is about, and needs no proc gate of its own.
+  --
+  -- ⚠ Shadow Bolt (686) is a subject here TOO, so the base id and its override id both carry
+  -- glows and they paint the SAME row. `ready()` on an override id is the open question
+  -- behind the report that Ruination never lit: the override has no cooldown of its own, so
+  -- `GetSpellCooldown` may answer for the base spell or not at all. Both are on the confirm
+  -- list in rules/demonology-diabolist.sg.
   ["demonology-diabolist"] = {
     label = "Demonology — Diabolist",
     glows = {
       {
         name = "Tyrant at five shards",
         subject = 265187,
-        when = { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
-        urgent = true,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 265187 },
+            { t = "not", term = { t = "ready", spell = 104316 } },
+            { t = "not", term = { t = "ready", spell = 1276452 } },
+            { t = "resource", power = "soul_shards", cmp = "==", value = 5, projected = true },
+          } },
       },
       {
         name = "Hand of Gul'dan capped",
@@ -58,9 +68,10 @@ Profiles.list = {
         urgent = true,
       },
       {
-        name = "Hand of Gul'dan in the spend band",
+        name = "Hand of Gul'dan outside the Tyrant hold",
         subject = 105174,
-        when = { t = "resource", power = "soul_shards", cmp = ">=", value = 4, projected = true },
+        when = { t = "resource", power = "soul_shards", cmp = ">=", value = 3, projected = true },
+        bind = { family = "duration", spell = 265187, cmp = ">", seconds = 5 },
       },
       {
         name = "Hand of Gul'dan inside the Argus window",
@@ -76,15 +87,33 @@ Profiles.list = {
           } },
       },
       {
+        name = "Demonbolt at Core cap",
+        subject = 264178,
+        bind = { family = "count", aura = 264173, threshold = 4 },
+        urgent = true,
+      },
+      {
         name = "Infernal Bolt below three shards",
         subject = 434506,
         when = { t = "resource", power = "soul_shards", cmp = "<", value = 3, projected = true },
       },
       {
+        name = "Shadow Bolt with no Core",
+        subject = 686,
+        when = { t = "and", terms = {
+            { t = "resource", power = "soul_shards", cmp = "<", value = 5, projected = true },
+            { t = "not", term = { t = "aura", spell = 264173 } },
+          } },
+      },
+      {
         name = "Implosion at six imps",
         subject = 196277,
-        when = { t = "ready", spell = 196277 },
+        when = { t = "and", terms = {
+            { t = "ready", spell = 196277 },
+            { t = "talent", spell = 1281511 },
+          } },
         bind = { family = "count", aura = 296553, threshold = 6 },
+        urgent = true,
       },
       {
         name = "Ruination",
@@ -115,15 +144,39 @@ Profiles.list = {
           } },
       },
       {
-        name = "Power Siphon with imps out",
-        subject = 264130,
-        bind = { family = "count", aura = 296553, threshold = 2 },
+        name = "Dreadstalkers with Tyrant far off",
+        subject = 104316,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 1276748 },
+            { t = "ready", spell = 104316 },
+          } },
+        bind = { family = "duration", spell = 265187, cmp = ">", seconds = 20 },
+        urgent = true,
       },
       {
-        name = "Demonbolt on two Cores",
-        subject = 264178,
-        bind = { family = "count", aura = 264173, threshold = 2 },
-        urgent = true,
+        name = "Dreadstalkers into the Tyrant window",
+        subject = 104316,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 1276748 },
+            { t = "ready", spell = 104316 },
+            { t = "not", term = { t = "ready", spell = 265187 } },
+          } },
+        bind = { family = "duration", spell = 265187, cmp = "<", seconds = 12 },
+      },
+      {
+        name = "Dreadstalkers with Tyrant ready",
+        subject = 104316,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 1276748 },
+            { t = "ready", spell = 104316 },
+            { t = "ready", spell = 265187 },
+          } },
+      },
+      {
+        name = "Power Siphon with imps out",
+        subject = 264130,
+        when = { t = "ready", spell = 264130 },
+        bind = { family = "count", aura = 296553, threshold = 2 },
       },
     },
   },
