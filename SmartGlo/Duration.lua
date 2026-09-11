@@ -109,7 +109,11 @@ end
 --- facts that reach the same dark mark.
 local function Apply(entry)
   local bind = entry.glow.bind
-  local ok, durObj = pcall(C_Spell.GetSpellCooldownDuration, bind.spell, false)
+  -- `ignoreGCD` TRUE. The GCD-inclusive form hands back a live duration object for a spell
+  -- that is merely mid-global-cooldown, so a `<` rung lights for 1.5s after every cast on a
+  -- spell that is actually up -- "a GCD-only cooldown must never read as real unavailability"
+  -- (cdm-rider-patterns.md).
+  local ok, durObj = pcall(C_Spell.GetSpellCooldownDuration, bind.spell, true)
   if not ok then
     Class(entry, "refused -- " .. ns.Capture.Safe(durObj))
     ApplyAbsent(entry)

@@ -376,8 +376,17 @@ local function EvalReady(term, trace)
     trace[#trace + 1] = { text = "ready(" .. term.spell .. "): isActive not readable", verdict = ns.UNKNOWN }
     return ns.UNKNOWN
   end
+  -- The GLOBAL cooldown reports through `isActive` too, so every rung gated on `ready()` went
+  -- dark for 1.5s after any cast -- most of the profile, most of the time. Blizzard separates
+  -- the two itself and this is its formula verbatim:
+  --   `self.isOnActualCooldown = not self.isOnGCD and self.cooldownIsActive`
+  --   [T1 src @12.1.0: CooldownViewer.lua:996]
+  -- `isOnGCD` is a CURRENT state, not a static property of the spell, and it reads plain in
+  -- restricted combat (cooldown-manager.md §7).
+  local onGCD = info.isOnGCD
+  if ns.IsSecret(onGCD) or type(onGCD) ~= "boolean" then onGCD = false end
   local verdict = ns.F
-  if not active and enabled ~= false then verdict = ns.T end
+  if (not active or onGCD) and enabled ~= false then verdict = ns.T end
   trace[#trace + 1] = { text = "ready(" .. Rules.Pretty(term.spell) .. ")", verdict = verdict }
   return verdict
 end
@@ -434,6 +443,24 @@ local function EvalActive(term, trace)
   return verdict
 end
 
+--- Is this spell's reported cooldown merely the GLOBAL one? `isOnGCD` is a current state and
+--- reads plain in restricted combat, unlike the `startTime`/`duration` it sits beside.
+---
+--- ⚠ Needed here as well as in `ready()`, because the CDM's own cooldown VISUAL SOURCE is not
+--- GCD-aware: `AddVisualDataSource_Cooldown` is gated on `cooldownIsActive`, not on
+--- `isOnActualCooldown` `[T1 src @12.1.0: CooldownViewer.lua:992-996]`. So `wasSetFromCooldown`
+--- goes true for a global cooldown and a capped charge reads as spent for 1.5s after any cast.
+--- `isOnActualCooldown` is the field that IS GCD-aware, and it cannot be used: it is assigned
+--- the value of a comparison over the secret `startTime`/`duration`, so it seals in combat,
+--- while `wasSetFromCooldown` is a literal `true` and does not.
+local function OnGCD(spell)
+  local ok, info = pcall(C_Spell.GetSpellCooldown, spell)
+  if not ok or type(info) ~= "table" then return false end
+  local gcd = info.isOnGCD
+  if ns.IsSecret(gcd) or type(gcd) ~= "boolean" then return false end
+  return gcd
+end
+
 local function EvalCharges(term, trace, wantMax)
   local label = ("%s(%s)"):format(term.t, Rules.Pretty(term.spell))
   local item = ns.Attach.ItemFor(term.spell)
@@ -457,6 +484,8 @@ local function EvalCharges(term, trace, wantMax)
     return ns.UNKNOWN
   end
   charges, cooldown = charges == true, cooldown == true
+  -- A global cooldown is not this spell being spent, so it must not read as one.
+  if cooldown and OnGCD(term.spell) then cooldown = false end
   local verdict
   if wantMax then
     verdict = (not charges and not cooldown) and ns.T or ns.F
