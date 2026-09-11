@@ -111,6 +111,11 @@ ns.RegisterCommand{
 --- ticker never writes: only edges do, or the ring fills in under a minute.
 ns.log = ns.Capture.Open("attach", { sessions = 6, cap = 600, dedup = true })
 
+--- A stream of its own, so a snapshot taken the moment something looked wrong cannot be
+--- evicted by an hour of play afterwards. Nothing writes here but `/sg why log`, which is why
+--- the cap buys roughly twenty snapshots rather than twenty seconds.
+ns.snap = ns.Capture.Open("why", { sessions = 6, cap = 2000 })
+
 local combat = CreateFrame("Frame")
 combat:RegisterEvent("PLAYER_REGEN_DISABLED")
 combat:RegisterEvent("PLAYER_REGEN_ENABLED")

@@ -173,7 +173,9 @@ function Procs.Refresh()
   end
 end
 
-local function Describe()
+--- The DIAL, in words. `Procs.Describe` answers about one row's alert; this answers about the
+--- setting that governs all of them, and a snapshot needs both.
+function Procs.Setting()
   local alpha = Procs.Alpha()
   if alpha == nil then return "shown" end
   if alpha <= 0 then return "HIDDEN" end
@@ -198,7 +200,7 @@ ns.RegisterCommand{
     local word = string.lower(string.match(rest or "", "^(%S*)"))
     if word == "" then
       ns.Printf("Blizzard proc glows are %s on rows with a rule. "
-        .. "`/sg procs dim` fades them, `/sg procs off` hides them.", Describe())
+        .. "`/sg procs dim` fades them, `/sg procs off` hides them.", Procs.Setting())
       return
     end
     local alpha
@@ -223,6 +225,6 @@ ns.RegisterCommand{
     ns.Store.SetSetting("procAlpha", alpha)
     ns.Store.SetSetting("suppressProcs", nil)
     Procs.Refresh()
-    ns.Printf("Blizzard proc glows are now %s on rows with a rule.", Describe())
+    ns.Printf("Blizzard proc glows are now %s on rows with a rule.", Procs.Setting())
   end,
 }

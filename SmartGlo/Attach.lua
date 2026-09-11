@@ -679,10 +679,15 @@ ns.RegisterCommand{
   end,
 }
 
+--- Snapshots are numbered so several taken in one session can be told apart by whoever reads
+--- them back, and a label rides along for the same reason -- the state that looked wrong is
+--- obvious while you are looking at it and gone by the time anyone opens the log.
+local snapshots = 0
+
 ns.RegisterCommand{
   name = "why",
-  args = "[spellID|copy|log]",
-  desc = "per-term T/F/? per rule; `copy` for a box, `log` for the capture stream",
+  args = "[spellID|copy|log [label]]",
+  desc = "per-term T/F/? per rule; `copy` for a box, `log <label>` for a full snapshot",
   handler = function(rest)
     local word = string.match(rest or "", "^(%S*)")
     if word == "copy" then
@@ -694,11 +699,23 @@ ns.RegisterCommand{
     -- single old line. This writes the whole snapshot, which is what a reader off the log
     -- needs and what no amount of watching the chat frame produces.
     if word == "log" then
+      local label = string.match(rest or "", "^%S*%s+(.-)%s*$")
+      if label == "" then label = nil end
+      local tail = ""
+      if label ~= nil then tail = "  -- " .. ns.Capture.Safe(label) end
+      snapshots = snapshots + 1
+      ns.snap:Mark("==== snapshot %d  %s%s ====", snapshots, date("%H:%M:%S"), tail)
+      local spec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization()
+      ns.snap:Mark("SmartGlo %s, spec %s, %d rule(s), proc glows %s",
+        tostring(ns.version), ns.Capture.Safe(spec), #ns.Store.All(),
+        ns.Capture.Safe(ns.Procs.Setting()))
+      ns.snap:Mark("-- rows --")
+      for _, line in ipairs(Rows()) do ns.snap:Mark("%s", ns.Capture.Safe(line)) end
+      ns.snap:Mark("-- rules --")
       local lines = Report(nil)
-      ns.log:Mark("---- /sg why ----")
-      for _, line in ipairs(lines) do ns.log:Mark("%s", ns.Capture.Safe(line)) end
-      ns.Printf("%d line(s) written to the attach capture. /reload to flush, then read it "
-        .. "with: uv run python -m wowkb.capture sg attach", #lines)
+      for _, line in ipairs(lines) do ns.snap:Mark("%s", ns.Capture.Safe(line)) end
+      ns.Printf("snapshot %d taken%s. Take as many as you like; /reload or log out to flush.",
+        snapshots, tail)
       return
     end
     for _, line in ipairs(Report(tonumber(word))) do
