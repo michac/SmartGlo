@@ -18,17 +18,36 @@ ns.Procs = Procs
 
 local hooked = false
 
---- Alpha is the addon's dial, and the template is why it works: every `<Alpha>` in
---- `ActionButtonSpellAlertTemplate` carries a `childKey`, so the animations drive the two
---- flipbook textures and nothing drives the frame's own alpha
---- `[T1 src @12.1.0: ActionButtonSpellAlerts.xml:21-33]`. Frame alpha multiplies down into
---- them and the running animation cannot take it back.
+--- Alpha is the addon's dial. ⚠ Setting it on the alert FRAME is not enough on its own: the
+--- write is accepted and reads back, and hiding that same frame removes the glow, so it is the
+--- right frame -- and the art stays at full brightness anyway. The dial is applied to the
+--- textures instead, and `Procs.Describe` reports the whole chain so the next capture says
+--- which link is dropping it.
 local DIM = 0.25
 
 local function Manager()
   local mgr = _G["ActionButtonSpellAlertManager"]
   if type(mgr) ~= "table" or type(mgr.HideAlert) ~= "function" then return nil end
   return mgr
+end
+
+--- The three textures the alert draws with. `ProcAltGlow` is the reduced-highlight art and
+--- stays hidden on a Cooldown Manager row, but it is dimmed alongside the other two rather
+--- than left as the one bright thing if the client ever does show it.
+local TEXTURES = { "ProcStartFlipbook", "ProcLoopFlipbook", "ProcAltGlow" }
+
+--- Alpha as the frame reports it, as it lands after the parent chain, and whether the region
+--- has opted out of that chain. The three together are what separate "the write was refused"
+--- from "the write took and something downstream ignores it".
+local function AlphaOf(region)
+  local gotOwn, own = pcall(region.GetAlpha, region)
+  if not gotOwn then return "alpha refused -- " .. ns.Capture.Safe(own) end
+  local gotEff, eff = pcall(region.GetEffectiveAlpha, region)
+  if not gotEff then eff = "?" end
+  local gotIgn, ign = pcall(region.IsIgnoringParentAlpha, region)
+  if not gotIgn then ign = "?" end
+  return ("a=%s eff=%s ignoreParent=%s"):format(ns.Capture.Safe(own), ns.Capture.Safe(eff),
+    ns.Capture.Safe(ign))
 end
 
 --- What the client's alert on this row is doing right now, in the words `/sg rows` prints
@@ -45,9 +64,16 @@ function Procs.Describe(item)
   if type(frame) ~= "table" or type(frame.GetAlpha) ~= "function" then
     return ("alert type %s, no Default frame parked"):format(tostring(kind))
   end
-  local gotAlpha, alpha = pcall(frame.GetAlpha, frame)
-  if not gotAlpha then return "GetAlpha refused -- " .. ns.Capture.Safe(alpha) end
-  return ("alert type %s, alpha %.2f"):format(tostring(kind), alpha)
+  local parts = { ("alert type %s, frame %s"):format(tostring(kind), AlphaOf(frame)) }
+  for _, key in ipairs(TEXTURES) do
+    local tex = frame[key]
+    if type(tex) == "table" and type(tex.GetAlpha) == "function" then
+      local gotShown, shown = pcall(tex.IsShown, tex)
+      parts[#parts + 1] = ("%s %s shown=%s"):format(key, AlphaOf(tex),
+        gotShown and ns.Capture.Safe(shown) or "?")
+    end
+  end
+  return table.concat(parts, "; ")
 end
 
 --- Blizzard parks the frame on the button itself for a Default alert, and a CDM row can only
@@ -86,18 +112,20 @@ local function ApplyTo(item)
   local frame = AlertFrame(item)
   if frame == nil then return end
   local ok, err = pcall(frame.SetAlpha, frame, alpha)
-  if not ok then
-    ns.log:Mark("procs: SetAlpha refused -- %s", ns.Capture.Safe(err))
-    return
-  end
-  -- Read straight back. A write that is accepted and then reads as something else is the one
-  -- failure the frame cannot be asked about later -- by the time anyone looks, a refresh has
-  -- been through. Logged only when it disagrees, so a working dial stays silent.
-  local got, back = pcall(frame.GetAlpha, frame)
-  if not got then
-    ns.log:Mark("procs: GetAlpha refused -- %s", ns.Capture.Safe(back))
-  elseif type(back) ~= "number" or math.abs(back - alpha) > 0.01 then
-    ns.log:Mark("procs: set alpha %.2f, frame reads back %s", alpha, ns.Capture.Safe(back))
+  if not ok then ns.log:Mark("procs: SetAlpha refused -- %s", ns.Capture.Safe(err)) end
+  -- Frame alpha alone leaves the glow at full brightness, while hiding the same frame removes
+  -- it -- so the frame is the right one and its alpha is not reaching the art. The dimming is
+  -- done on the textures' VERTEX colour, which is a separate channel from the alpha the two
+  -- animation groups drive: `ProcLoop` repeats forever and rewrites each flipbook's alpha
+  -- every cycle, and would win against a texture `SetAlpha` between our re-asserts.
+  for _, key in ipairs(TEXTURES) do
+    local tex = frame[key]
+    if type(tex) == "table" and type(tex.SetVertexColor) == "function" then
+      local tinted, why = pcall(tex.SetVertexColor, tex, 1, 1, 1, alpha)
+      if not tinted then
+        ns.log:Mark("procs: %s SetVertexColor refused -- %s", key, ns.Capture.Safe(why))
+      end
+    end
   end
 end
 
@@ -160,6 +188,15 @@ local function RestoreAll()
       if frame ~= nil then
         local ok, err = pcall(frame.SetAlpha, frame, 1)
         if not ok then ns.log:Mark("procs: restore refused -- %s", ns.Capture.Safe(err)) end
+        for _, key in ipairs(TEXTURES) do
+          local tex = frame[key]
+          if type(tex) == "table" and type(tex.SetVertexColor) == "function" then
+            local tinted, why = pcall(tex.SetVertexColor, tex, 1, 1, 1, 1)
+            if not tinted then
+              ns.log:Mark("procs: %s restore refused -- %s", key, ns.Capture.Safe(why))
+            end
+          end
+        end
       end
     end
   end
