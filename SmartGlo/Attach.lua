@@ -29,6 +29,13 @@ local dirty, flushQueued = false, false
 local dirtySources = {}
 local editing = false
 
+--- `/sg marks off`. Separate from every rule's own verdict: the rules go on evaluating and
+--- the log goes on recording, only the mark stops drawing. That is what makes it the
+--- discriminator -- with our marks dark, anything still glowing on an icon is the client's.
+local function Muted()
+  return ns.Store.Setting("marksHidden") == true
+end
+
 --- Weak-keyed so nothing of ours lands on a Blizzard frame and nothing of ours pins one.
 local alertHooked = setmetatable({}, { __mode = "k" })
 
@@ -455,7 +462,7 @@ function Attach.Evaluate()
   end
   ns.Overlay.DarkenStale(live)
   for subject in pairs(bound) do
-    ns.Overlay.SetVisible(ns.Overlay.For(subject), not editing)
+    ns.Overlay.SetVisible(ns.Overlay.For(subject), not editing and not Muted())
   end
   ns.Duration.Refresh()
   ns.Health.Refresh()
@@ -706,9 +713,11 @@ ns.RegisterCommand{
       snapshots = snapshots + 1
       ns.snap:Mark("==== snapshot %d  %s%s ====", snapshots, date("%H:%M:%S"), tail)
       local spec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization()
-      ns.snap:Mark("SmartGlo %s, spec %s, %d rule(s), proc glows %s",
+      local marks = "shown"
+      if Muted() then marks = "HIDDEN" end
+      ns.snap:Mark("SmartGlo %s, spec %s, %d rule(s), proc glows %s, our marks %s",
         tostring(ns.version), ns.Capture.Safe(spec), #ns.Store.All(),
-        ns.Capture.Safe(ns.Procs.Setting()))
+        ns.Capture.Safe(ns.Procs.Setting()), marks)
       ns.snap:Mark("-- rows --")
       for _, line in ipairs(Rows()) do ns.snap:Mark("%s", ns.Capture.Safe(line)) end
       ns.snap:Mark("-- rules --")
@@ -721,5 +730,29 @@ ns.RegisterCommand{
     for _, line in ipairs(Report(tonumber(word))) do
       ns.Print(line)
     end
+  end,
+}
+
+ns.RegisterCommand{
+  name = "marks",
+  args = "[on|off]",
+  desc = "Smart Glo's own marks -- off leaves the client's glows as the only ones drawn",
+  handler = function(rest)
+    local word = string.lower(string.match(rest or "", "^(%S*)"))
+    if word == "on" then
+      ns.Store.SetSetting("marksHidden", nil)
+    elseif word == "off" then
+      ns.Store.SetSetting("marksHidden", true)
+    elseif word ~= "" then
+      ns.Print("`/sg marks on|off`.")
+      return
+    end
+    Attach.Evaluate()
+    if Muted() then
+      ns.Print("Smart Glo's marks are HIDDEN. Anything still glowing on an icon is the "
+        .. "client's own -- `/sg procs` governs that one. `/sg marks on` to bring ours back.")
+      return
+    end
+    ns.Print("Smart Glo's marks are shown.")
   end,
 }
