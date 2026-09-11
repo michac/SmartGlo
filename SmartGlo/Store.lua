@@ -68,10 +68,25 @@ local function Resync()
     return
   end
   local source, applied = ProfileStamp(profile), db.settings.profileStamp
+  -- ⚠ A copy applied before this tracking existed carries no stamp, and no comparison can
+  -- tell an untouched one from a hand-edited one. Adopting whatever is stored as the baseline
+  -- is the only safe reading -- it overwrites nothing -- and it is what makes every LATER
+  -- change resync by itself. This build's own change is the one that has to be asked for.
+  if applied == nil then
+    db.settings.profileStamp = Stamp(db.glows)
+    if db.settings.profileStamp ~= source then
+      ns.Printf("⚠ your %s rules predate update tracking and are OUT OF DATE -- rule fixes "
+        .. "in this build are NOT active. `/sg profile %s` to take them (this replaces any "
+        .. "edits of your own). From then on updates apply by themselves.",
+        profile.label, name)
+    end
+    return
+  end
   if source == applied then return end
   if Stamp(db.glows) ~= applied then
-    ns.Printf("%s has changed, but your rules differ from the copy you applied -- "
-      .. "leaving them alone. `/sg profile %s` to take the new version.", profile.label, name)
+    ns.Printf("⚠ %s has changed and those fixes are NOT active, but your rules differ from "
+      .. "the copy you applied -- leaving them alone. `/sg profile %s` to take the new "
+      .. "version.", profile.label, name)
     return
   end
   db.glows = Copy(profile.glows)
