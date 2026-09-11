@@ -387,10 +387,10 @@ function Parse.Render(glows)
     lines[#lines + 1] = ('glow "%s"'):format(glow.name or "")
     lines[#lines + 1] = "  on     " .. ns.Names.Write(glow.subject, scope)
     if glow.when ~= nil then
-      lines[#lines + 1] = "  when   " .. ns.Rules.Describe(glow.when)
+      lines[#lines + 1] = "  when   " .. ns.Rules.Describe(glow.when, scope)
     end
     if glow.bind ~= nil then
-      lines[#lines + 1] = "  bind   " .. ns.Rules.DescribeBind(glow.bind)
+      lines[#lines + 1] = "  bind   " .. ns.Rules.DescribeBind(glow.bind, scope)
     end
     if glow.color ~= nil then
       lines[#lines + 1] = "  color  " .. glow.color

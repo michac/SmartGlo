@@ -106,11 +106,27 @@ end
 --- A TRANSFORM is the other shape: Judgment becomes Hammer of Wrath, Hand of Gul'dan becomes
 --- Ruination. Those are different abilities on one row and must stay different subjects, or a
 --- rung written about the base would light over art showing the replacement.
+--- ⚠ A name the client has not cached yet reads as nil, which is NOT "a different ability" --
+--- it is no answer. Treating it as one keys the row under the override alone and a rule
+--- written on the base stays dark until some unrelated relayout, so an unanswered id is asked
+--- for and the flush is redone when it arrives.
+local namePending = {}
+
+local function NameOf(spellID)
+  local ok, name = pcall(C_Spell.GetSpellName, spellID)
+  if ok and type(name) == "string" then return name end
+  if not namePending[spellID] then
+    namePending[spellID] = true
+    pcall(C_Spell.RequestLoadSpellData, spellID)
+  end
+  return nil
+end
+
 local function SameAbility(a, b)
-  local gotA, nameA = pcall(C_Spell.GetSpellName, a)
-  if not gotA or type(nameA) ~= "string" then return false end
-  local gotB, nameB = pcall(C_Spell.GetSpellName, b)
-  if not gotB or type(nameB) ~= "string" then return false end
+  local nameA = NameOf(a)
+  if nameA == nil then return false end
+  local nameB = NameOf(b)
+  if nameB == nil then return false end
   return nameA == nameB
 end
 
@@ -352,6 +368,38 @@ local function LogRows()
 end
 
 
+--- Every spell id the laid-out rows answer to, rebuilt each flush. Kept so an unbound
+--- subject can be told apart from a subject with nowhere to go.
+local laidOut = {}
+
+--- A subject that bound nothing, beside a laid-out row showing a spell of THE SAME NAME, is
+--- a resolution that picked the wrong id of several. Nothing else here can tell that apart
+--- from a talent the player did not take, and both are silently dark.
+---
+--- ⚠ The same display-name heuristic `SameAbility` uses, but here it only decides what to
+--- PRINT, so being wrong costs a misleading hint rather than a binding.
+local function NameTwin(subject)
+  local gotWant, want = pcall(C_Spell.GetSpellName, subject)
+  if not gotWant or type(want) ~= "string" then return nil end
+  for _, id in ipairs(laidOut) do
+    if id ~= subject then
+      local got, name = pcall(C_Spell.GetSpellName, id)
+      if got and name == want then return id, name end
+    end
+  end
+  return nil
+end
+
+--- Why nothing bound, in terms the player can act on. Shared by `/sg why` and the flush log.
+function Attach.WhyUnbound(subject)
+  local twin, name = NameTwin(subject)
+  if twin == nil then
+    return "no laid-out row"
+  end
+  return ("no laid-out row -- but %d is laid out and is also called %q, so this rule most "
+    .. "likely names the wrong one"):format(twin, name)
+end
+
 local function Flush()
   flushQueued = false
   if not dirty then return end
@@ -370,6 +418,7 @@ local function Flush()
   for _, subject in ipairs(ns.Store.Subjects()) do subjects[subject] = true end
 
   local seen, matched = 0, 0
+  laidOut = {}
   for _, entry in ipairs(Viewers()) do
     local viewer, isBuffViewer = entry[1], entry[2]
     local iter = ActiveFrames(viewer)
@@ -381,6 +430,7 @@ local function Flush()
           local info = InfoFor(id)
           if info ~= nil then
             for _, spell in ipairs(BoundSpells(info)) do
+              laidOut[#laidOut + 1] = spell
               if subjects[spell] and bound[spell] == nil then
                 bound[spell] = item
                 ns.Overlay.Anchor(ns.Overlay.For(spell), item)
@@ -406,8 +456,8 @@ local function Flush()
     TakeSources(), seen, matched, CountKeys(subjects))
   for subject in pairs(subjects) do
     if bound[subject] == nil then
-      ns.log:Mark("  no frame for %s -- the Cooldown Manager is not laying that row out",
-        ns.Capture.Safe(ns.Rules.Label(subject)))
+      ns.log:Mark("  no frame for %s -- %s", ns.Capture.Safe(ns.Rules.Label(subject)),
+        ns.Capture.Safe(Attach.WhyUnbound(subject)))
     end
   end
   LogRows()
@@ -501,7 +551,17 @@ end
 -- ------------------------------------------------------------------ the wiring
 
 local override = CreateFrame("Frame")
-override:SetScript("OnEvent", function() Attach.MarkDirty("SpellOverrideUpdated") end)
+override:SetScript("OnEvent", function(_, event, spellID)
+  if event == "SPELL_DATA_LOAD_RESULT" then
+    -- Only an id a flush actually asked about, or this re-flushes on every spell the client
+    -- streams in while zoning.
+    if not namePending[spellID] then return end
+    namePending[spellID] = nil
+    Attach.MarkDirty("SpellDataLoaded")
+    return
+  end
+  Attach.MarkDirty("SpellOverrideUpdated")
+end)
 
 local events = CreateFrame("Frame")
 -- The cast ledger is fed here rather than from a frame of its own: a projected
@@ -556,6 +616,7 @@ local function InstallHooks()
   -- override, and the bind of a glow whose subject IS the override id depends on it:
   -- Ruination over Hand of Gul'dan, Infernal Bolt over Shadow Bolt.
   override:RegisterEvent("COOLDOWN_VIEWER_SPELL_OVERRIDE_UPDATED")
+  override:RegisterEvent("SPELL_DATA_LOAD_RESULT")
   EventRegistry:RegisterCallback("EditMode.Enter", function()
     editing = true
     ns.log:Mark("edit mode enter")
@@ -672,7 +733,7 @@ local function Report(only)
   for _, glow in ipairs(all) do
     if only == nil or glow.subject == only then
       local verdict, trace = ns.Rules.Evaluate(ns.Rules.Gate(glow))
-      local attached = "no laid-out row"
+      local attached = Attach.WhyUnbound(glow.subject)
       if bound[glow.subject] ~= nil then attached = "attached" end
       lines[#lines + 1] = ("%s on %s -- %s, %s"):format(glow.name or "(unnamed)",
         ns.SpellLabel(glow.subject), verdict, attached)

@@ -269,8 +269,10 @@ end
 --- `Describe` and `DescribeBind`, whose output has to parse back, so it may only ever return
 --- a rule symbol or a bare id -- never a display name, which carries spaces and punctuation
 --- the grammar cannot read. `Rules.Pretty` is the one to use for anything a person reads.
-function Rules.Label(spellID)
-  return ns.Names.Of(spellID) or tostring(spellID)
+--- ⚠ `scope` is required wherever the result has to parse back as the SAME id; `Names.Of`
+--- says what dropping it costs.
+function Rules.Label(spellID, scope)
+  return ns.Names.Of(spellID, scope) or tostring(spellID)
 end
 
 --- The same thing for a HUMAN: the rule symbol when there is one, else the client's own name
@@ -756,35 +758,35 @@ function Rules.Triggers(expr, into)
   return into
 end
 
-local function Describe(expr)
+local function Describe(expr, scope)
   if type(expr) ~= "table" then return "?" end
   if expr.t == "and" or expr.t == "or" then
     local parts = {}
-    for _, sub in ipairs(expr.terms) do parts[#parts + 1] = Describe(sub) end
+    for _, sub in ipairs(expr.terms) do parts[#parts + 1] = Describe(sub, scope) end
     return "(" .. table.concat(parts, " " .. expr.t .. " ") .. ")"
   elseif expr.t == "not" then
-    return "not " .. Describe(expr.term)
+    return "not " .. Describe(expr.term, scope)
   elseif expr.t == "resource" then
     return ("%s%s %s %s"):format(expr.power, expr.projected and ".after_cast" or "",
       expr.cmp, tostring(expr.value))
   elseif SPELL_TERM[expr.t] then
-    return expr.t .. "(" .. Rules.Label(expr.spell) .. ")"
+    return expr.t .. "(" .. Rules.Label(expr.spell, scope) .. ")"
   end
   return tostring(expr.t)
 end
 
 Rules.Describe = Describe
 
-function Rules.DescribeBind(bind)
+function Rules.DescribeBind(bind, scope)
   if type(bind) ~= "table" then return "?" end
   if bind.family == "count" then
-    return ("%s.stacks >= %s"):format(Rules.Label(bind.aura), tostring(bind.threshold))
+    return ("%s.stacks >= %s"):format(Rules.Label(bind.aura, scope), tostring(bind.threshold))
   end
   if bind.family == "health" then
     return ("health%% %s %s"):format(bind.cmp, bind.percent)
   end
   if bind.family == "presence" then
-    local body = ("%s.up"):format(Rules.Label(bind.aura))
+    local body = ("%s.up"):format(Rules.Label(bind.aura, scope))
     if bind.unit ~= "player" then body = body .. " on " .. bind.unit end
     if string.find(bind.filter, "PLAYER", 1, true) then body = body .. " mine" end
     return body
@@ -792,9 +794,9 @@ function Rules.DescribeBind(bind)
   if bind.family == "duration" then
     local body
     if bind.cmp == "outside" then
-      body = ("%s.cooldown outside %ss..%ss"):format(Rules.Label(bind.spell), bind.lo, bind.hi)
+      body = ("%s.cooldown outside %ss..%ss"):format(Rules.Label(bind.spell, scope), bind.lo, bind.hi)
     else
-      body = ("%s.cooldown %s %ss"):format(Rules.Label(bind.spell), bind.cmp, bind.seconds)
+      body = ("%s.cooldown %s %ss"):format(Rules.Label(bind.spell, scope), bind.cmp, bind.seconds)
     end
     if bind.absent then body = body .. " absent " .. bind.absent end
     return body

@@ -22,6 +22,20 @@ local TABLES = {
   aura = { specs = "auraSpecs", names = "auraNames" },
 }
 
+--- The name an id answers to inside one spec. Two ids of a spec sharing a slug is the norm,
+--- so the generator gives the bare slug to the one a rule can bind to and spells the rest
+--- `<slug>_<id>` for that spec alone -- 24275 is `hammer_of_wrath` in Retribution and
+--- `hammer_of_wrath_24275` in Protection, where the row carries 1241413.
+function Names.NameIn(key, id, kind)
+  local where = TABLES[kind or "ability"] or TABLES.ability
+  if kind ~= "aura" then
+    local per = ns.Symbols.specNames[key]
+    local scoped = per and per[id]
+    if scoped ~= nil then return scoped end
+  end
+  return ns.Symbols[where.names][id]
+end
+
 local function IndexFor(key, kind)
   local where = TABLES[kind] or TABLES.ability
   local cache = index[kind] or index.ability
@@ -31,8 +45,20 @@ local function IndexFor(key, kind)
   if ids == nil then return nil end
   built = {}
   for _, id in ipairs(ids) do
-    local name = ns.Symbols[where.names][id]
-    if name ~= nil then built[name] = id end
+    local name = Names.NameIn(key, id, kind)
+    if name ~= nil then
+      local held = built[name]
+      -- The generator's whole job is that this cannot happen, so it is worth saying out loud
+      -- rather than letting the last id written take the name: a silent winner here is a rule
+      -- that resolves cleanly and glows on the wrong spell.
+      if held ~= nil and held ~= id then
+        ns.Printf("⚠ symbols: %s names both %d and %d %q -- the generated table is stale. "
+          .. "Rules naming it resolve to %d; regenerate with `wowkb.gen_smartglo_symbols`.",
+          key, held, id, name, held)
+      else
+        built[name] = id
+      end
+    end
     -- An id the sources name twice — a talent and the ability it grants, or the inventory and
     -- the CDM disagreeing on wording — resolves under either name.
     local also = kind ~= "aura" and ns.Symbols.alsoNamed[id] or nil
@@ -40,6 +66,30 @@ local function IndexFor(key, kind)
   end
   cache[key] = built
   return built
+end
+
+--- `<slug>_<id>`, accepted for ANY id the spec carries and not only the ones the generator
+--- had to mint it for. That generality is what makes the spelling stable: it keeps naming the
+--- same spell after a regeneration hands the bare slug elsewhere. Both halves have to agree,
+--- so a prefix naming a different spell than the id refuses instead of trusting the number.
+---
+--- Reached only after the plain lookup missed, so a real name ending in digits still wins.
+local function ResolveSuffixed(key, text, kind)
+  local bare, digits = string.match(text, "^(.+)_(%d+)$")
+  if bare == nil then return nil end
+  local id = tonumber(digits)
+  local ids = ns.Symbols[(TABLES[kind] or TABLES.ability).specs][key]
+  if ids == nil then return nil end
+  local carried = false
+  for _, one in ipairs(ids) do
+    if one == id then carried = true break end
+  end
+  if not carried then
+    return nil, ("%s carries no spell %d, so %q names nothing here"):format(key, id, text)
+  end
+  local full = Names.NameIn(key, id, kind)
+  if full == text or full == bare then return id end
+  return nil, ("%d is %s in %s, not %q"):format(id, tostring(full), key, text)
 end
 
 --- Why a bare name is not in the aura table: it may name two tracked rows rather than none,
@@ -105,6 +155,9 @@ function Names.Resolve(text, scope, kind)
     local by_name = IndexFor(key, kind)
     local id = by_name and by_name[bare]
     if id == nil then
+      local suffixed, mismatch = ResolveSuffixed(key, bare, kind)
+      if suffixed ~= nil then return suffixed end
+      if mismatch ~= nil then return nil, mismatch end
       if kind == "aura" then return nil, AuraRefusal(key, bare) end
       return nil, ("%s has no %q"):format(key, bare)
     end
@@ -121,6 +174,9 @@ function Names.Resolve(text, scope, kind)
   local by_name = IndexFor(scope, kind)
   local id = by_name and by_name[text]
   if id == nil then
+    local suffixed, mismatch = ResolveSuffixed(scope, text, kind)
+    if suffixed ~= nil then return suffixed end
+    if mismatch ~= nil then return nil, mismatch end
     if kind == "aura" then return nil, AuraRefusal(scope, text) end
     return nil, ("%s has no %q"):format(scope, text)
   end
@@ -129,7 +185,13 @@ end
 
 --- The name to print for an id. Nil for one the inventory does not carry -- an override id
 --- or a raw number a rule spelled out -- and the caller prints the number instead.
-function Names.Of(spellID)
+---
+--- ⚠ Pass `scope` for anything that has to PARSE BACK: without it this answers the global
+--- name, which inside a spec that gave the bare slug to another id reads back as that id.
+function Names.Of(spellID, scope)
+  if scope ~= nil and ns.Symbols.specs[scope] ~= nil then
+    return Names.NameIn(scope, spellID)
+  end
   return ns.Symbols.names[spellID]
 end
 
@@ -155,10 +217,14 @@ end
 --- How a rule should WRITE an id: bare inside `scope`, qualified when it belongs to another
 --- spec, and the raw number when the inventory does not name it at all.
 function Names.Write(spellID, scope)
-  local name = ns.Symbols.names[spellID]
-  if name == nil then return tostring(spellID) end
+  if scope ~= nil and ns.Symbols.specs[scope] ~= nil then
+    local here = Names.NameIn(scope, spellID)
+    if here ~= nil then return here end
+  end
   local key = Names.SpecOf(spellID)
   if key == nil then return tostring(spellID) end
+  local name = Names.NameIn(key, spellID)
+  if name == nil then return tostring(spellID) end
   if key == scope then return name end
   return key .. "." .. name
 end
@@ -189,8 +255,25 @@ local function Matches(id, want)
   return false, got
 end
 
+--- The table is slugged from ENGLISH names, so on any other client every row disagrees and
+--- the check becomes thousands of false positives at the login screen.
+local function EnglishClient()
+  if type(GetLocale) ~= "function" then return true end
+  local ok, locale = pcall(GetLocale)
+  if not ok then return true end
+  return locale == "enUS" or locale == "enGB"
+end
+
 --- `report` nil runs silently and prints only on a mismatch; true always prints a summary.
 function Names.Check(report)
+  if not EnglishClient() then
+    if report then
+      ns.Printf("symbols: the table is slugged from English spell names and this client is "
+        .. "%s, so a name check could only disagree. Resolving is unaffected -- rules name "
+        .. "ids, not client text.", tostring(GetLocale()))
+    end
+    return
+  end
   local ids = {}
   for id in pairs(ns.Symbols.names) do ids[#ids + 1] = id end
   table.sort(ids)

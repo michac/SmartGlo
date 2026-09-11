@@ -21,6 +21,10 @@ stds.wow = {
     "issecretvalue",
     "C_Spell",
 
+    -- Names.lua — the symbol table is slugged from English spell names, so the client's
+    -- locale decides whether checking it against the client can mean anything.
+    "GetLocale",
+
     -- Rules.lua — the readable vocabulary: secondary resources, the cooldown info table,
     -- and the trait config, which is how `talent()` asks whether a node is purchased.
     -- `C_SpellBook` is how `ready()` screens out a spell the player does not have, which
