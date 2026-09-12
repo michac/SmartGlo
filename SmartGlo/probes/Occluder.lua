@@ -49,11 +49,14 @@ local function Tile(parent, x, y, width, icon, half, trim, caption)
   art:SetTexture(icon)
   art:SetAllPoints(tile)
 
+  -- MARK ONLY, deliberately: this probe measures whether a crop covers the mark, and the
+  -- plate the product draws would sit between the two things being compared.
   local mark = tile:CreateTexture(nil, "ARTWORK")
   mark:SetTexture(ns.Look.MASTER)
   local rgb = ns.Look.Rgb(ns.Look.DEFAULT)
   mark:SetVertexColor(rgb[1], rgb[2], rgb[3])
-  mark:SetSize(width * ns.Look.FRACTION, width * ns.Look.FRACTION)
+  local size = width * ns.Look.FRACTION * ns.Look.MARK_SCALE
+  mark:SetSize(size, size)
   mark:SetPoint("CENTER")
   ns.Look.Spin(mark)
 
