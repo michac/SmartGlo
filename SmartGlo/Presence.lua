@@ -40,7 +40,9 @@ end
 local function Arm(entry, key)
   local glow, host = entry.glow, entry.host
   local size = entry.width * ns.Look.FRACTION
+  local plate = size * ns.Look.PLATE_SCALE
   local rgb = ns.Look.Rgb(glow.color or ns.Look.DEFAULT)
+  local plateRgb = ns.Look.PLATE_RGB
 
   local okFrame, container = pcall(CreateFrame, "AuraContainer", nil, host,
     "CustomAuraContainerTemplate")
@@ -56,6 +58,15 @@ local function Arm(entry, key)
     candidateFilters = { includeSpellIDs = { [glow.bind.aura] = true } },
     initializeFrame = function(button)
       button:SetSize(entry.width, entry.width)
+      -- The plate, same as the gate sink draws, turning with the mark: the mark's dark phase
+      -- needs a known ground. Colour in three -- PLATE_ALPHA is baked into the file, and a
+      -- fourth argument would be the same channel `SetAlpha` writes (Overlay.lua, BuildElement).
+      local ground = button:CreateTexture(nil, "ARTWORK")
+      ground:SetTexture(ns.Look.PLATE)
+      ground:SetVertexColor(plateRgb[1], plateRgb[2], plateRgb[3])
+      ground:SetSize(plate, plate)
+      ground:SetPoint("CENTER")
+      ns.Look.Spin(ground)
       local mark = button:CreateTexture(nil, "OVERLAY")
       mark:SetTexture(ns.Look.MASTER)
       mark:SetSize(size, size)

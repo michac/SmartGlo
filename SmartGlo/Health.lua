@@ -68,8 +68,10 @@ local function CurveFor(bind)
   return curve
 end
 
---- The health family is a sealed family that owns a mark's ALPHA. `Overlay.SetLit` asks this
---- before writing that channel, so ownership is decided once rather than per frame.
+--- The health family is a sealed family that owns the drawn art's ALPHA -- mark and plate
+--- together, through `Overlay.SetArt`, because a plate lit without its mark is a false glow.
+--- `Overlay.SetLit` asks this before writing that channel, so ownership is decided once rather
+--- than per frame.
 function Health.Owns(glow)
   return type(glow.bind) == "table" and glow.bind.family == "health"
 end
@@ -99,19 +101,19 @@ local function Apply(entry)
   if not ok then
     -- A refused evaluation is not a zero: it is the client declining, and a mark drawn on a
     -- fabricated zero would be a wrong answer rather than a missing one.
-    entry.element.mark:SetAlpha(0)
+    ns.Overlay.SetArt(entry.element, 0)
     Class(entry, "refused -- " .. ns.Capture.Safe(value))
     return
   end
   -- Neither a secret nor a number is not an alpha: writing it raises inside the ticker, and
   -- writing a zero instead would report a health this never read.
   if not ns.IsSecret(value) and type(value) ~= "number" then
-    entry.element.mark:SetAlpha(0)
+    ns.Overlay.SetArt(entry.element, 0)
     Class(entry, "not an alpha -- " .. ns.Capture.Safe(value))
     return
   end
   Class(entry, ns.Capture.Safe(value))
-  entry.element.mark:SetAlpha(value)
+  ns.Overlay.SetArt(entry.element, value)
 end
 
 local function Tick()

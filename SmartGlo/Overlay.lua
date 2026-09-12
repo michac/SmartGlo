@@ -48,6 +48,21 @@ local function BuildElement(host)
   e:SetAllPoints(host)
   e:SetAlpha(0)
 
+  -- The plate: the same hexagon flooded solid, UNDER the mark, turning with it. It is what the
+  -- mark's dark phase is dim against, so that phase is a known ground rather than whatever the
+  -- spell art is there. Both Spins are armed in this call, so they turn in step.
+  -- ⚠ The colour in THREE arguments and no translucency written here at all: `PLATE_ALPHA` is
+  -- baked into the file. A fourth argument would be the same channel `SetAlpha` writes --
+  -- `SetVertexColor` adds the aspects {VertexColor, Alpha} -- so the alpha write that follows
+  -- clobbers it and the plate draws solid `[client 2026-09-11]`.
+  local plate = e:CreateTexture(nil, "ARTWORK")
+  plate:SetTexture(ns.Look.PLATE)
+  local rgb = ns.Look.PLATE_RGB
+  plate:SetVertexColor(rgb[1], rgb[2], rgb[3])
+  plate:SetPoint("CENTER")
+  plate:SetAlpha(0)
+  ns.Look.Spin(plate)
+
   -- Our own Texture, tinted here and turning here. Both kinds of glow reveal THIS mark: a
   -- gate by drawing it, a count by having the client take its occluder away.
   local mark = e:CreateTexture(nil, "OVERLAY")
@@ -56,6 +71,7 @@ local function BuildElement(host)
   mark:SetAlpha(0)
   ns.Look.Spin(mark)
 
+  e.plate = plate
   e.mark = mark
   e.pulse = ns.Look.Pulse(mark)
   return e
@@ -63,12 +79,17 @@ end
 
 --- The mark is a FRACTION of the row it rides, so its size follows the host's -- and an
 --- element built after the host was anchored has to be sized on arrival, not only on the next
---- anchor, or it draws at nothing.
+--- anchor, or it draws at nothing. The plate is a multiple of the mark and comes off the same
+--- one width, so the pair keeps its proportion at every icon size.
 function SizeMarks(f)
   local width = f:GetWidth()
   if type(width) ~= "number" or width <= 0 then return end
   local size = width * ns.Look.FRACTION
-  for _, e in pairs(f.elements) do e.mark:SetSize(size, size) end
+  local plate = size * ns.Look.PLATE_SCALE
+  for _, e in pairs(f.elements) do
+    e.mark:SetSize(size, size)
+    e.plate:SetSize(plate, plate)
+  end
 end
 
 --- One persistent frame per subject: a count element's aura container is hosted on its element
@@ -126,6 +147,18 @@ function Overlay.SetVisible(f, visible)
   if visible then f:SetAlpha(1) else f:SetAlpha(0) end
 end
 
+--- THE DRAWN ART'S ALPHA, both regions, one call -- and the only door to it. The plate shows the
+--- same thing the mark shows, so whatever decides that the mark is drawn decides the plate too;
+--- a caller that wrote only the mark left a lit plate with nothing on it, which is what Word of
+--- Glory drew until this existed `[client 2026-09-11]`.
+--- `alpha` may be a SECRET handed over by a sealed family. It goes straight to two `SetAlpha`
+--- sinks and is never read, compared or multiplied -- which is why the plate's translucency is
+--- in the art and not applied here.
+function Overlay.SetArt(e, alpha)
+  e.mark:SetAlpha(alpha)
+  e.plate:SetAlpha(alpha)
+end
+
 --- An element outlives the rule that built it -- elements are never destroyed, because a
 --- count's aura container may only be armed once. So a rule set replaced under a live overlay
 --- leaves marks nothing writes any more, frozen at the alpha they last held, and a sealed one
@@ -135,18 +168,22 @@ function Overlay.DarkenStale(live)
     for _, e in pairs(f.elements) do
       if not live[e] then
         e:SetAlpha(0)
-        e.mark:SetAlpha(0)
+        Overlay.SetArt(e, 0)
       end
     end
   end
 end
 
 --- The gate, and the tint that goes with it. The COLOUR write is unconditional -- vertex
---- colour carries no secret and is a different channel from alpha. The MARK's alpha is
+--- colour carries no secret and is a different channel from alpha. The ART's alpha is
 --- written only for an element whose mark nothing has sealed. A count element is NOT sealed
 --- here: its occluder is a sibling drawn above the mark, not another writer of the mark's
 --- alpha. Only a duration bind owns that channel, and then a write here would be a second
 --- owner of one channel.
+--- ⚠ The PLATE is not written separately for a sealed element, and that is the point: it shows
+--- whatever the mark shows, so it belongs to whoever owns the mark's alpha (`SetArt`). The
+--- element frame's own alpha still gates both, so a sealed element that is not lit shows
+--- nothing either way.
 function Overlay.SetLit(e, lit, color, sealed, urgent)
   -- A cycling colour has ONE writer and it is not here; `SetTint` either paints a solid or
   -- hands the mark to the shared ticker. Either way vertex colour carries no secret, so this
@@ -154,7 +191,7 @@ function Overlay.SetLit(e, lit, color, sealed, urgent)
   ns.Look.SetTint(e.mark, color)
   e:SetAlpha(lit and 1 or 0)
   if not sealed then
-    e.mark:SetAlpha(lit and 1 or 0)
+    Overlay.SetArt(e, lit and 1 or 0)
   end
   -- The pulse is a fourth channel and owns nothing the other three do: it says how hard the
   -- mark presses, never whether it is drawn. A sealed mark pulses while the client decides

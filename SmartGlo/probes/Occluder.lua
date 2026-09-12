@@ -49,6 +49,9 @@ local function Tile(parent, x, y, width, icon, half, trim, caption)
   art:SetTexture(icon)
   art:SetAllPoints(tile)
 
+  -- No plate here, and it is deliberate: the probe measures how far a crop of the ICON has to
+  -- reach to cover what we draw, and a translucent ground over the art would change the thing
+  -- being looked at. What the crop must clear is the plate's WIDTH, and that is checked below.
   local mark = tile:CreateTexture(nil, "ARTWORK")
   mark:SetTexture(ns.Look.MASTER)
   local rgb = ns.Look.Rgb(ns.Look.DEFAULT)
@@ -163,10 +166,13 @@ ns.RegisterCommand{
       -- texels drawn at exactly `width`, both integers), so it is the only candidate that
       -- cannot be invalidated by moving the icon-size slider. What it costs is the corners --
       -- our copy is unmasked where the real icon is rounded.
-      if n == nil or n <= ns.Look.FRACTION or n > 1.0 then
-        ns.Printf("usage: /sg tune crop 0.82   (above %.2f so it covers the mark, at most 1.0; "
-          .. "1.0 is exact at every size but redraws the rounded corners square)",
-          ns.Look.FRACTION)
+      -- The floor is the PLATE's width, not the mark's: the plate is the widest thing an
+      -- element draws, and a crop that clears the mark but not the plate leaves a ground
+      -- peeking out under a count that has not reached its threshold.
+      local widest = ns.Look.FRACTION * ns.Look.PLATE_SCALE
+      if n == nil or n <= widest or n > 1.0 then
+        ns.Printf("usage: /sg tune crop 0.82   (above %.2f so it covers the plate, at most 1.0; "
+          .. "1.0 is exact at every size but redraws the rounded corners square)", widest)
         return
       end
       ns.Look.OCCLUDE = n

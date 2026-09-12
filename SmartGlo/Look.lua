@@ -15,10 +15,10 @@ Look.DEFAULT = "alarm"
 
 --- The mark's side, as a fraction of the icon. It was 0.72 and is 0.53 because the mark reads
 --- better small: a hexagon that nearly fills the icon competes with the art it is marking,
---- where one with air around it is a mark ON the icon.
+--- where one with air around it is a mark ON the icon. The plate is sized from this, so the
+--- pair keeps its proportion wherever it goes.
 --- ⚠ `OCCLUDE` does NOT follow it down. That crop was measured by eye against the ICON and is
---- only required to be above this; shrinking the mark widens the margin and changes nothing
---- about what the occluder should cover.
+--- only required to be above the widest thing drawn -- which is the plate, not the mark.
 Look.FRACTION = 0.53
 Look.SPIN_SECONDS = 3
 
@@ -169,6 +169,34 @@ end
 
 --- One white master, tinted per glow: every mark is our texture, so no hue needs its own file.
 Look.MASTER = "Interface\\AddOns\\SmartGlo\\Media\\hex-white"
+
+--- The PLATE: the same hexagon flooded solid, drawn UNDER the mark so the mark's dark phase is
+--- dim against a known ground rather than against whatever the spell art happens to be there.
+--- It TURNS WITH THE MARK -- same period, same direction, its own group started in the same
+--- call -- so the two read as one object with a ground rather than as a mark sliding over a
+--- backing. Two groups and not one because an animation applies to the region that owns its
+--- group, and these are two textures.
+Look.PLATE = "Interface\\AddOns\\SmartGlo\\Media\\hex-fill"
+
+--- The plate's side, as a multiple of the MARK's. Wide enough that the mark has ground on every
+--- side of it at every icon size; `FRACTION * PLATE_SCALE` = 0.742 stays inside `OCCLUDE`, which
+--- it must, or a count's occluder would leave a plate peeking out below its threshold.
+Look.PLATE_SCALE = 1.4
+
+--- `purple` at 35% of its value: the same hue the palette offers, at a value that still reads as
+--- a GROUND. Full `purple` is a light lavender whose relative luminance is 0.608 against
+--- `yellow`'s 0.817 -- a 15% swing, which is the exact mistake the black-to-yellow cycle was
+--- built to undo, and a plate in it would hand that mistake back as a background. At 35% the
+--- plate is 0.213 and the swing above it is a Michelson 0.60.
+Look.PLATE_RGB = { 0.27, 0.18, 0.35 }
+
+--- ⚠ This number is BAKED INTO THE FILE by tool/gen_media.py, which reads it from this line. It
+--- is not written at runtime, and it cannot be: `SetVertexColor`'s fourth argument and
+--- `SetAlpha` are one channel -- `SetVertexColor` adds the aspects {VertexColor, Alpha} -- so
+--- the alpha write that says whether the plate is drawn at all would clobber a translucency put
+--- here, and the plate drew solid `[client 2026-09-11]`. The art carries it instead, so the one
+--- `SetAlpha` per plate stays free for the value that may be secret.
+Look.PLATE_ALPHA = 0.55
 
 --- The occluder escape: `fileID` drawn at `fraction` of `width`, cropped to the same centred
 --- fraction of the file, so it lands exactly over the pixels it is hiding. The Cooldown
