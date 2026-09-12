@@ -239,7 +239,9 @@ end
 ---
 --- It BOUNCES, and the channel is the point: plain modulates brightness in place, urgent
 --- modulates POSITION. They share no channel at all, where a size pulse read as the same kind
---- of event as plain -- "the mark got stronger, where it was" -- only louder.
+--- of event as plain -- "the mark got stronger, where it was" -- only louder. It starts at the
+--- TOP of the drop, so an urgent mark differs from its plain neighbours the instant it lights
+--- rather than after the climb.
 ---
 --- A translation's offset is in the region's own units, which is fine here: the CDM resizes
 --- icons with `SetScale` and `Overlay.Anchor` gives the host that same effective scale, so an
@@ -247,7 +249,7 @@ end
 --- size anyway, which is the one place that keeps the invariant true.
 Look.BOUNCE_SECONDS = 1.8
 
---- The first apex, as a fraction of the mark's own size.
+--- The height it is RELEASED from, as a fraction of the mark's own size.
 --- ⚠ CAPPED BY THE OCCLUDER, not chosen by eye. A count reveals the mark by the client taking
 --- away an occluder cropped to OCCLUDE of the icon, so a mark that rises out of that footprint
 --- is visible BELOW its threshold -- the exact false positive the sink exists to prevent. In
@@ -259,7 +261,7 @@ Look.BOUNCE_HEIGHT = 0.26
 
 --- Restitution: each hop reaches this fraction of the last height.
 Look.BOUNCE_E = 0.42
---- The toss plus three settling bounces.
+--- The drop plus three settling bounces.
 Look.BOUNCE_HOPS = 4
 --- The fraction of the period spent sitting still on the plate at the end.
 --- ⚠ The rest is load-bearing, not padding: an unbroken oscillation at the edge of vision
@@ -267,54 +269,64 @@ Look.BOUNCE_HOPS = 4
 Look.BOUNCE_REST = 0.26
 
 --- Offsets in the region's own units, so they follow the mark's size. Separate from `Bounce`
---- because `SizeMarks` re-arms an already-built group on every resize.
+--- because `SizeMarks` re-arms an already-built group on every resize. Every segment is
+--- `{ anim, dy, height }` and the sign is baked in at build, so this is one multiply per
+--- segment and no knowledge of the chain's shape.
 function Look.ArmBounce(group, size)
-  for _, hop in ipairs(group.hops) do
-    local rise = size * Look.BOUNCE_HEIGHT * hop.height
-    hop.up:SetOffset(0, rise)
-    hop.down:SetOffset(0, -rise)
+  for _, seg in ipairs(group.segments) do
+    seg.anim:SetOffset(0, seg.dy * size * Look.BOUNCE_HEIGHT * seg.height)
   end
 end
 
---- A ball tossed and left to settle. Heights fall as BOUNCE_E^i and arc durations as their
---- SQUARE ROOT, because under constant gravity time goes as the root of height -- so the
---- settle quickens on its own, and that quickening is what reads as *thrown* rather than as
---- blinking on a timer. Durations are normalised so the whole chain plus the rest is
---- BOUNCE_SECONDS.
+--- A ball DROPPED and left to settle. It starts AT its apex and falls -- the differentiation
+--- from a plain mark is there on the first frame rather than a fifth of a second in, which is
+--- most of what a glance is. Heights fall as BOUNCE_E^i and arc times as their SQUARE ROOT,
+--- because under constant gravity time goes as the root of height -- so the settle quickens on
+--- its own, and that quickening is what reads as *dropped* rather than as blinking on a timer.
 ---
---- Per hop, two ordered Translations: up smoothed OUT (decelerating to the apex) and down
---- smoothed IN (accelerating to the landing). A translation's offset ACCUMULATES across the
---- group rather than being measured from the layout position, which is why the way back down
---- is an equal-and-opposite second animation and not the end of the first
---- (frames-textures-animation.md, the Lua-setter table). The chain therefore sums to ZERO by
---- construction: what a looping group does with one that does not is unmeasured, and this one
---- never asks.
+--- The chain is: an instant snap to the release height, then fall, rise, fall, rise, fall...
+--- each segment smoothed IN going down (accelerating into the landing) and OUT coming up
+--- (decelerating to the apex), then the rest. A translation's offset ACCUMULATES across the
+--- group rather than being measured from the layout position, which is what makes a chain of
+--- deltas the way to express this, and why it sums to ZERO by construction: what a looping
+--- group does with one that does not is unmeasured, and this one never asks
+--- (frames-textures-animation.md, the Lua-setter table).
+---
+--- ⚠ The snap is a ZERO-DURATION Translation, which is Blizzard's own idiom for exactly this
+--- (`Blizzard_MajorFactionRenownToast.xml` offsets a glow line +242 at `duration="0.0"` and
+--- translates it back over 0.43s). If a client ever declines to apply one, the symptom is
+--- specific and worth recognising: every fall after it goes BELOW the plate instead of down to
+--- it, because the chain is deltas and the first one went missing.
+---
 --- Armed here, looping, and not played -- `SetLit` starts it.
 function Look.Bounce(region)
   local group = region:CreateAnimationGroup()
-  local heights, durations, total = {}, {}, 0
-  for i = 0, Look.BOUNCE_HOPS - 1 do
-    local h = Look.BOUNCE_E ^ i
-    heights[i + 1] = h
-    durations[i + 1] = math.sqrt(h)
-    total = total + durations[i + 1]
+  local segments, order = {}, 0
+
+  local function Add(height, dy, seconds, smoothing)
+    local anim = group:CreateAnimation("Translation")
+    order = order + 1
+    anim:SetDuration(seconds)
+    anim:SetOrder(order)
+    if smoothing ~= nil then anim:SetSmoothing(smoothing) end
+    segments[#segments + 1] = { anim = anim, dy = dy, height = height }
   end
 
-  local span = Look.BOUNCE_SECONDS * (1 - Look.BOUNCE_REST)
-  local hops, order = {}, 0
+  -- Half-arc times, unnormalised: a full hop of height h takes sqrt(h), so half of one takes
+  -- half that. The drop is a single half-arc; every bounce after it is a rise and a fall.
+  local heights, half, total = {}, {}, 0
   for i = 1, Look.BOUNCE_HOPS do
-    local half = durations[i] / total * span / 2
-    local up = group:CreateAnimation("Translation")
-    order = order + 1
-    up:SetDuration(half)
-    up:SetOrder(order)
-    up:SetSmoothing("OUT")
-    local down = group:CreateAnimation("Translation")
-    order = order + 1
-    down:SetDuration(half)
-    down:SetOrder(order)
-    down:SetSmoothing("IN")
-    hops[i] = { up = up, down = down, height = heights[i] }
+    local h = Look.BOUNCE_E ^ (i - 1)
+    heights[i] = h
+    half[i] = math.sqrt(h) / 2
+    total = total + half[i] * (i == 1 and 1 or 2)
+  end
+  local k = Look.BOUNCE_SECONDS * (1 - Look.BOUNCE_REST) / total
+
+  Add(heights[1], 1, 0)                                  -- released at the apex
+  for i = 1, Look.BOUNCE_HOPS do
+    if i > 1 then Add(heights[i], 1, half[i] * k, "OUT") end
+    Add(heights[i], -1, half[i] * k, "IN")
   end
 
   local rest = group:CreateAnimation("Translation")
@@ -322,7 +334,7 @@ function Look.Bounce(region)
   rest:SetOrder(order + 1)
   rest:SetOffset(0, 0)
 
-  group.hops = hops
+  group.segments = segments
   Look.ArmBounce(group, region:GetHeight() or 0)
   group:SetLooping("REPEAT")
   return group
