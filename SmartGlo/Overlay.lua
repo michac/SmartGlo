@@ -52,9 +52,13 @@ local function BuildElement(host)
   -- phase is dim against a known ground rather than against the spell art. It never turns
   -- and never bounces -- it is what the mark lands on, and a plate that moved too would read
   -- as the icon sliding rather than as something happening ON the icon.
+  -- ⚠ Black in THREE arguments, and the translucency written as alpha by `SetLit`. A fourth
+  -- argument here would be the same channel `SetAlpha` writes -- `SetVertexColor` adds the
+  -- aspects {VertexColor, Alpha} -- so the later gate write clobbered it and the plate drew
+  -- solid black `[client 2026-09-11]`. One writer per channel, as everywhere else here.
   local plate = e:CreateTexture(nil, "ARTWORK")
   plate:SetTexture(ns.Look.PLATE)
-  plate:SetVertexColor(0, 0, 0, ns.Look.PLATE_ALPHA)
+  plate:SetVertexColor(0, 0, 0)
   plate:SetPoint("CENTER")
   plate:SetAlpha(0)
 
@@ -180,8 +184,10 @@ function Overlay.SetLit(e, lit, color, sealed, urgent)
   end
   -- The PLATE follows the readable gate, never the seal. The sealed families own `e.mark`'s
   -- alpha and a second writer of one channel is the one thing forbidden here -- so the plate
-  -- is driven from `lit` alongside the element frame, which carries no secret.
-  e.plate:SetAlpha(lit and 1 or 0)
+  -- is driven from `lit` alongside the element frame, which carries no secret. This write
+  -- carries the TRANSLUCENCY too: it is the plate's only alpha writer, so PLATE_ALPHA has to
+  -- ride the gate rather than sit in the vertex colour it would overwrite.
+  e.plate:SetAlpha(lit and ns.Look.PLATE_ALPHA or 0)
   -- Urgent runs the SPIN faster too, so an urgent glow drifts out of phase with the plain
   -- ones beside it on two channels rather than one. Written only when it CHANGES: this runs on
   -- every evaluation, and re-timing a turn that is already turning at that rate is at best

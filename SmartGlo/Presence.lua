@@ -61,7 +61,10 @@ local function Arm(entry, key)
       -- No bounce here -- a presence mark is never urgent, so nothing would start one.
       local ground = button:CreateTexture(nil, "ARTWORK")
       ground:SetTexture(ns.Look.PLATE)
-      ground:SetVertexColor(0, 0, 0, ns.Look.PLATE_ALPHA)
+      -- Black in three, translucency as alpha: the fourth argument is the same channel
+      -- `SetAlpha` writes and does not survive one (Overlay.lua, BuildElement).
+      ground:SetVertexColor(0, 0, 0)
+      ground:SetAlpha(ns.Look.PLATE_ALPHA)
       ground:SetSize(plate, plate)
       ground:SetPoint("CENTER")
       local mark = button:CreateTexture(nil, "OVERLAY")

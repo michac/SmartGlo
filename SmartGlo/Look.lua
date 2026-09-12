@@ -185,6 +185,11 @@ Look.MASTER = "Interface\\AddOns\\SmartGlo\\Media\\hex-white"
 --- is what makes the brightness cycle safe -- the mark's dark phase is dim against a known
 --- ground instead of against whatever spell art the slot happens to hold.
 Look.PLATE = "Interface\\AddOns\\SmartGlo\\Media\\hex-fill"
+
+--- ⚠ Written as the plate's REGION alpha, never as a fourth argument to `SetVertexColor` --
+--- that call adds the aspects {VertexColor, Alpha}, so its alpha is the same channel
+--- `SetAlpha` writes and the gate write wins. The plate drew solid black until this moved
+--- `[client 2026-09-11]`.
 Look.PLATE_ALPHA = 0.55
 
 --- Both layers are fractions of FRACTION, so one width sizes the pair. The plate is slightly
