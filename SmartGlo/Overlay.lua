@@ -52,10 +52,10 @@ local function BuildElement(host)
   -- phase is dim against a known ground rather than against the spell art. It never turns
   -- and never bounces -- it is what the mark lands on, and a plate that moved too would read
   -- as the icon sliding rather than as something happening ON the icon.
-  -- ⚠ Black in THREE arguments, and the translucency written as alpha by `SetLit`. A fourth
-  -- argument here would be the same channel `SetAlpha` writes -- `SetVertexColor` adds the
-  -- aspects {VertexColor, Alpha} -- so the later gate write clobbered it and the plate drew
-  -- solid black `[client 2026-09-11]`. One writer per channel, as everywhere else here.
+  -- ⚠ Black in THREE arguments, and no translucency written here at all: `PLATE_ALPHA` is
+  -- baked into the file. A fourth argument would be the same channel `SetAlpha` writes --
+  -- `SetVertexColor` adds the aspects {VertexColor, Alpha} -- so the alpha write that follows
+  -- clobbers it and the plate draws solid black `[client 2026-09-11]`.
   local plate = e:CreateTexture(nil, "ARTWORK")
   plate:SetTexture(ns.Look.PLATE)
   plate:SetVertexColor(0, 0, 0)
@@ -151,6 +151,18 @@ function Overlay.SetVisible(f, visible)
   if visible then f:SetAlpha(1) else f:SetAlpha(0) end
 end
 
+--- THE ART'S ALPHA, both regions, one call -- and the only door to it. The plate is a second
+--- region showing the same thing the mark shows, so anything that decides whether the mark is
+--- drawn decides the plate too; a caller that wrote only the mark would leave a lit plate with
+--- nothing on it, which is what a sealed bind did until this existed `[client 2026-09-11]`.
+--- `alpha` may be a SECRET handed over by a sealed family. It is passed straight through to two
+--- `SetAlpha` sinks and never read, compared or multiplied -- which is why the plate's
+--- translucency is in the art and not applied here.
+function Overlay.SetArt(e, alpha)
+  e.mark:SetAlpha(alpha)
+  e.plate:SetAlpha(alpha)
+end
+
 --- An element outlives the rule that built it -- elements are never destroyed, because a
 --- count's aura container may only be armed once. So a rule set replaced under a live overlay
 --- leaves marks nothing writes any more, frozen at the alpha they last held, and a sealed one
@@ -160,8 +172,7 @@ function Overlay.DarkenStale(live)
     for _, e in pairs(f.elements) do
       if not live[e] then
         e:SetAlpha(0)
-        e.mark:SetAlpha(0)
-        e.plate:SetAlpha(0)
+        Overlay.SetArt(e, 0)
       end
     end
   end
@@ -180,14 +191,13 @@ function Overlay.SetLit(e, lit, color, sealed, urgent)
   ns.Look.SetTint(e.mark, color, urgent)
   e:SetAlpha(lit and 1 or 0)
   if not sealed then
-    e.mark:SetAlpha(lit and 1 or 0)
+    Overlay.SetArt(e, lit and 1 or 0)
   end
-  -- The PLATE follows the readable gate, never the seal. The sealed families own `e.mark`'s
-  -- alpha and a second writer of one channel is the one thing forbidden here -- so the plate
-  -- is driven from `lit` alongside the element frame, which carries no secret. This write
-  -- carries the TRANSLUCENCY too: it is the plate's only alpha writer, so PLATE_ALPHA has to
-  -- ride the gate rather than sit in the vertex colour it would overwrite.
-  e.plate:SetAlpha(lit and ns.Look.PLATE_ALPHA or 0)
+  -- ⚠ The PLATE is not written here for a sealed element, and that is the whole point: it
+  -- shows whatever the mark shows, so it belongs to whoever owns the mark's alpha. Giving it
+  -- the readable GATE instead left Word of Glory drawing a lit plate with no mark on it
+  -- whenever its health bind said dark `[client 2026-09-11]`. The element frame's own alpha
+  -- above still gates both, so a sealed element that is not lit shows nothing either way.
   -- Urgent runs the SPIN faster too, so an urgent glow drifts out of phase with the plain
   -- ones beside it on two channels rather than one. Written only when it CHANGES: this runs on
   -- every evaluation, and re-timing a turn that is already turning at that rate is at best

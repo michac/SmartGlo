@@ -53,7 +53,7 @@ local PALETTE = {
   green = { 0.43, 0.91, 0.50 },
   blue = { 0.38, 0.69, 1.00 },
   purple = { 0.77, 0.52, 1.00 },
-  ember = { 0.30, 0.25, 0.08 },
+  ember = { 0.15, 0.12, 0.04 },   -- `yellow` at 15%: the same hue, not a second one
   orange = { 1.00, 0.58, 0.25 },
   cyan = { 0.37, 0.92, 0.91 },
 }
@@ -62,10 +62,12 @@ local PALETTE = {
 --- rather than its hue. Chroma is most of what peripheral vision throws away and luminance
 --- most of what it keeps, so a cycle between two hues of similar brightness spends its whole
 --- budget on the channel the edge of vision discards. `ember` to `yellow` is one hue dark to
---- full, Michelson contrast about 0.6 where two similarly-bright hues gave 0.15 -- four times
---- the modulation for the same one SetVertexColor per tick. The mark sits on a translucent
---- black PLATE so the dark phase is dim against a known black rather than against whatever
---- spell art is in that slot.
+--- full, Michelson contrast 0.74 where two similarly-bright hues gave 0.15 -- five times the
+--- modulation for the same one SetVertexColor per tick. ⚠ The dark end has to be genuinely
+--- DARK: at 30% of the bright end it reads as a grey stroke rather than as an absence, because
+--- a 3px line at 30% brightness on mixed icon art is just a mid-tone `[client 2026-09-11]`.
+--- The mark sits on a translucent black PLATE, so the dark phase is dim against a known black
+--- rather than against whatever spell art is in that slot.
 ---
 --- ⚠ Vertex colour is written, not animated. The animation system has no colour type, and the
 --- two ways to fake one both fail here: stacking two textures and crossfading their ALPHA
@@ -186,10 +188,16 @@ Look.MASTER = "Interface\\AddOns\\SmartGlo\\Media\\hex-white"
 --- ground instead of against whatever spell art the slot happens to hold.
 Look.PLATE = "Interface\\AddOns\\SmartGlo\\Media\\hex-fill"
 
---- ⚠ Written as the plate's REGION alpha, never as a fourth argument to `SetVertexColor` --
---- that call adds the aspects {VertexColor, Alpha}, so its alpha is the same channel
---- `SetAlpha` writes and the gate write wins. The plate drew solid black until this moved
---- `[client 2026-09-11]`.
+--- ⚠ BAKED INTO THE FILE by `tool/gen_media.py`, which reads this number -- the plate's own
+--- alpha channel is the one thing it cannot carry at runtime. Two separate reasons, and each
+--- alone is enough:
+--- * `SetVertexColor`'s fourth argument is the same channel `SetAlpha` writes (it adds the
+---   aspects {VertexColor, Alpha}), so a translucency put there is clobbered by the next
+---   `SetAlpha` and the plate draws solid black `[client 2026-09-11]`.
+--- * A sealed bind hands the drawn art a SECRET alpha, and the plate has to take that same
+---   value or it stays lit while the mark is dark. Nothing may multiply a constant into it
+---   here, so the constant has to be in the art already.
+--- Change this and re-run `gen_media.py`; a plain release will not move it.
 Look.PLATE_ALPHA = 0.55
 
 --- Both layers are fractions of FRACTION, so one width sizes the pair. The plate is slightly
