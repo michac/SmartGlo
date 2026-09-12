@@ -12,7 +12,14 @@ local Look = {}
 ns.Look = Look
 
 Look.DEFAULT = "alarm"
-Look.FRACTION = 0.72
+
+--- The mark's side, as a fraction of the icon. It was 0.72 and is 0.53 because the mark reads
+--- better small: a hexagon that nearly fills the icon competes with the art it is marking,
+--- where one with air around it is a mark ON the icon.
+--- ⚠ `OCCLUDE` does NOT follow it down. That crop was measured by eye against the ICON and is
+--- only required to be above this; shrinking the mark widens the margin and changes nothing
+--- about what the occluder should cover.
+Look.FRACTION = 0.53
 Look.SPIN_SECONDS = 3
 
 --- MEASURED BY EYE on a live Essential row, which is the only oracle this has. It is above
@@ -53,21 +60,19 @@ local PALETTE = {
   green = { 0.43, 0.91, 0.50 },
   blue = { 0.38, 0.69, 1.00 },
   purple = { 0.77, 0.52, 1.00 },
-  ember = { 0.15, 0.12, 0.04 },   -- `yellow` at 15%: the same hue, not a second one
   orange = { 1.00, 0.58, 0.25 },
   cyan = { 0.37, 0.92, 0.91 },
+  --- The dark end of the `alarm` swing. Not a colour anyone would pick for a glow, and it is
+  --- in the palette anyway because a cycle names its ends from here.
+  black = { 0.02, 0.02, 0.02 },
 }
 
---- A CYCLE is two colours a mark crosses between, and it swings the mark's BRIGHTNESS
---- rather than its hue. Chroma is most of what peripheral vision throws away and luminance
---- most of what it keeps, so a cycle between two hues of similar brightness spends its whole
---- budget on the channel the edge of vision discards. `ember` to `yellow` is one hue dark to
---- full, Michelson contrast 0.74 where two similarly-bright hues gave 0.15 -- five times the
---- modulation for the same one SetVertexColor per tick. ⚠ The dark end has to be genuinely
---- DARK: at 30% of the bright end it reads as a grey stroke rather than as an absence, because
---- a 3px line at 30% brightness on mixed icon art is just a mid-tone `[client 2026-09-11]`.
---- The mark sits on a translucent black PLATE, so the dark phase is dim against a known black
---- rather than against whatever spell art is in that slot.
+--- A CYCLE is two colours a mark crosses between, and `alarm` crosses between the DARK and
+--- BRIGHT ends of one hue rather than between two hues. Chroma is most of what peripheral
+--- vision discards and luminance is most of what it keeps, so a swing between near-black and
+--- yellow spends the whole budget on the channel that survives being seen out of the corner of
+--- an eye. It also cannot be swallowed by the icon underneath: no spell art is both very dark
+--- and very bright in the same place, so one end of the swing always stands off it.
 ---
 --- ⚠ Vertex colour is written, not animated. The animation system has no colour type, and the
 --- two ways to fake one both fail here: stacking two textures and crossfading their ALPHA
@@ -75,32 +80,21 @@ local PALETTE = {
 --- frame a texture does not have. So one shared ticker writes every cycling mark instead --
 --- it draws and never evaluates, like the sealed families' own.
 --- The period is bounded by the DECISION window, not by taste: a glance lasts about a GCD,
---- so a cycle slower than one completes less than once while you are looking and a look that
---- lands in the dark phase sees nothing at all. 0.6s puts two and a half cycles in a 1.5s
---- GCD, so no glance can miss the bright end. 1.67 Hz, well under the 3 Hz where flashing
---- starts to be a problem.
+--- and at 1.6s the cycle completed 0.9 times in one -- so a look that landed in the dark phase
+--- saw nothing at all, which is the exact failure the cycle exists to prevent. 0.6s puts two
+--- and a half cycles in a 1.5s GCD, so no glance can miss the bright end.
+--- 1.67 Hz, well under the 3 Hz where flashing starts to be a problem.
 Look.CYCLE_SECONDS = 0.6
 
---- ...and the mark HOLDS each end rather than sweeping between them, which is what maximises
---- the DUTY CYCLE of the luminance swing: a linear crossing spends most of its time at some
---- middling brightness, so the eye is offered the full dark-to-bright difference only for an
---- instant per period. Holding the ends means the mark is at one extreme or the other 70% of
---- the time and in transit for 30%.
+--- ...and the mark HOLDS each end rather than sweeping between them. A linear crossing spends
+--- most of its time in the middle, which is a dim mustard -- neither end, and the least
+--- visible of the three. Holding the ends and crossing fast maximises the duty cycle of the
+--- swing: the mark is at one extreme 70% of the time and in between for 30%.
 Look.CYCLE_CROSS = 0.15
 local CYCLES = {
-  alarm = { "ember", "yellow" },
+  alarm = { "black", "yellow" },
 }
 
---- An urgent mark runs its whole clock -- cycle and spin -- this much faster than a plain
---- one. Not fast enough to read as a speed on its own; fast enough that an urgent glow DRIFTS
---- OUT OF PHASE with every plain one beside it. The cycle is where this actually buys
---- something: every glow's hue comes from one shared ticker and one absolute `GetTime()`, so
---- plain glows are in exact lockstep and breaking that lockstep costs no brightness, no size
---- and no screen. (The spin is a weaker signal the same way -- spin groups are `Play()`ed at
---- build, so glows are already out of phase with each other there.)
-Look.URGENT_RATE = 1.18
-
---- mark -> { pair, fast }. `fast` picks which of the two phases `Tick` computed.
 local cycling = setmetatable({}, { __mode = "k" })
 local ticker
 
@@ -118,20 +112,10 @@ local function Wave(phase)
   return 1 - (phase - 2 * hold - cross) / cross
 end
 
---- Both blends are computed ONCE per tick and picked per mark, so the work is O(number of
---- rates) rather than O(number of marks) -- and both stay a pure function of absolute
---- `GetTime()`, so every mark at a given rate is phase-locked to every other without anyone
---- holding state across a reload.
-local function Blend(rate)
-  local now = GetTime() * rate
-  return Wave((now % Look.CYCLE_SECONDS) / Look.CYCLE_SECONDS)
-end
-
 local function Tick()
-  local slow, fast = Blend(1), Blend(Look.URGENT_RATE)
-  for mark, entry in pairs(cycling) do
-    local t = entry.fast and fast or slow
-    local pair = entry.pair
+  local phase = (GetTime() % Look.CYCLE_SECONDS) / Look.CYCLE_SECONDS
+  local t = Wave(phase)
+  for mark, pair in pairs(cycling) do
     local from, to = PALETTE[pair[1]], PALETTE[pair[2]]
     mark:SetVertexColor(Lerp(from[1], to[1], t), Lerp(from[2], to[2], t),
       Lerp(from[3], to[3], t))
@@ -144,9 +128,7 @@ end
 
 --- Register a mark as cycling, or take it off. The single writer of a cycling mark's vertex
 --- colour is `Tick`, so `SetLit` must hand the mark over rather than tinting it itself.
---- `fast` runs the cycle at URGENT_RATE. Three-argument SetVertexColor throughout: the
---- fourth channel is the sealed bind's and is never written here.
-function Look.SetTint(mark, name, fast)
+function Look.SetTint(mark, name)
   local pair = CYCLES[name]
   if pair == nil then
     cycling[mark] = nil
@@ -154,7 +136,7 @@ function Look.SetTint(mark, name, fast)
     mark:SetVertexColor(rgb[1], rgb[2], rgb[3])
     return
   end
-  cycling[mark] = { pair = pair, fast = fast and true or false }
+  cycling[mark] = pair
   if ticker == nil then ticker = C_Timer.NewTicker(0.05, Tick) end
 end
 
@@ -170,43 +152,23 @@ function Look.Names()
   return names
 end
 
---- A cycle has no single rgb, so anything that needs one -- a preview, a fallback, a mark that
---- is drawn once and never handed to the ticker -- takes the BRIGHT end of the pair rather than
---- the default, which may itself be a cycle. The bright end, because the pair runs dark to
---- bright and a mark frozen at the dark end is a mark you cannot see.
+--- A cycle has no single rgb, so anything that needs one -- a preview, a fallback -- takes the
+--- BRIGHT end of the pair rather than the default, which may itself be a cycle. The bright end
+--- and not the first: `alarm` starts at near-black, and a static mark drawn in the dark end is
+--- a mark nobody can see.
+local function Bright(pair)
+  return PALETTE[pair[#pair]]
+end
+
 function Look.Rgb(name)
   local pair = CYCLES[name]
-  if pair ~= nil then return PALETTE[pair[#pair]] end
-  return PALETTE[name] or PALETTE[CYCLES[Look.DEFAULT] and CYCLES[Look.DEFAULT][1] or Look.DEFAULT]
+  if pair ~= nil then return Bright(pair) end
+  return PALETTE[name] or (CYCLES[Look.DEFAULT] and Bright(CYCLES[Look.DEFAULT]))
+    or PALETTE[Look.DEFAULT]
 end
 
 --- One white master, tinted per glow: every mark is our texture, so no hue needs its own file.
 Look.MASTER = "Interface\\AddOns\\SmartGlo\\Media\\hex-white"
-
---- The PLATE: the same hexagon flooded solid, drawn black and translucent UNDER the mark. It
---- is what makes the brightness cycle safe -- the mark's dark phase is dim against a known
---- ground instead of against whatever spell art the slot happens to hold.
-Look.PLATE = "Interface\\AddOns\\SmartGlo\\Media\\hex-fill"
-
---- ⚠ BAKED INTO THE FILE by `tool/gen_media.py`, which reads this number -- the plate's own
---- alpha channel is the one thing it cannot carry at runtime. Two separate reasons, and each
---- alone is enough:
---- * `SetVertexColor`'s fourth argument is the same channel `SetAlpha` writes (it adds the
----   aspects {VertexColor, Alpha}), so a translucency put there is clobbered by the next
----   `SetAlpha` and the plate draws solid black `[client 2026-09-11]`.
---- * A sealed bind hands the drawn art a SECRET alpha, and the plate has to take that same
----   value or it stays lit while the mark is dark. Nothing may multiply a constant into it
----   here, so the constant has to be in the art already.
---- Change this and re-run `gen_media.py`; a plain release will not move it.
-Look.PLATE_ALPHA = 0.55
-
---- Both layers are fractions of FRACTION, so one width sizes the pair. The plate is slightly
---- LARGER than the mark it grounds and the mark is well inside it, which is what leaves the
---- mark room to bounce without leaving the plate.
---- ⚠ Both must stay inside OCCLUDE: a count's occluder is the subject's icon cropped to
---- OCCLUDE, and anything drawn outside that footprint is visible BELOW the threshold.
-Look.MARK_SCALE = 0.74
-Look.PLATE_SCALE = 1.04
 
 --- The occluder escape: `fileID` drawn at `fraction` of `width`, cropped to the same centred
 --- fraction of the file, so it lands exactly over the pixels it is hiding. The Cooldown
@@ -247,116 +209,36 @@ end
 
 --- How hard a mark presses, beyond being lit at all. `urgent` is the only level above plain
 --- and it means "this one outranks the ordinary reading" -- a resource actively being wasted,
---- not merely a button that is available. The keyword says the MEANING so the drawing can be
---- retuned without touching a rule.
+--- not merely a button that is available.
 ---
---- It BOUNCES, and the channel is the point: plain modulates brightness in place, urgent
---- modulates POSITION. They share no channel at all, where a size pulse read as the same kind
---- of event as plain -- "the mark got stronger, where it was" -- only louder. It starts at the
---- TOP of the drop, so an urgent mark differs from its plain neighbours the instant it lights
---- rather than after the climb.
----
---- A translation's offset is in the region's own units, which is fine here: the CDM resizes
---- icons with `SetScale` and `Overlay.Anchor` gives the host that same effective scale, so an
---- offset in host units scales with the icon. `SizeMarks` re-arms the offsets from the mark's
---- size anyway, which is the one place that keeps the invariant true.
-Look.BOUNCE_SECONDS = 1.8
+--- It PULSES rather than bounces, and the choice is not cosmetic: a translation is an offset
+--- in absolute units, so it would need re-arming on every icon-size change -- the exact bug
+--- class that left the mark at its old size until `OnSizeChanged` fixed it. A scale is
+--- proportional and immune. The keyword says the MEANING so the drawing can be retuned
+--- without touching a rule.
+Look.PULSE_SECONDS = 0.45
+Look.PULSE_SCALE = 1.35
 
---- The height it is RELEASED from, as a fraction of the mark's own size.
---- ⚠ CAPPED BY THE OCCLUDER, not chosen by eye. A count reveals the mark by the client taking
---- away an occluder cropped to OCCLUDE of the icon, so a mark that rises out of that footprint
---- is visible BELOW its threshold -- the exact false positive the sink exists to prevent. In
---- icon widths: the mark is FRACTION * MARK_SCALE = 0.533 wide, so its half-height is 0.266;
---- the occluder's half-width is OCCLUDE / 2 = 0.410. The headroom is 0.144, which is 0.270 of
---- the mark's own size -- so this may not exceed 0.27. The plate does not bounce and at
---- FRACTION * PLATE_SCALE = 0.749 is inside OCCLUDE regardless.
-Look.BOUNCE_HEIGHT = 0.26
-
---- Restitution: each hop reaches this fraction of the last height.
-Look.BOUNCE_E = 0.42
---- The drop plus three settling bounces.
-Look.BOUNCE_HOPS = 4
---- The fraction of the period spent sitting still on the plate at the end.
---- ⚠ The rest is load-bearing, not padding: an unbroken oscillation at the edge of vision
---- ADAPTS AWAY, where a discrete event that stops and restarts does not.
-Look.BOUNCE_REST = 0.26
-
---- Offsets in the region's own units, so they follow the mark's size. Separate from `Bounce`
---- because `SizeMarks` re-arms an already-built group on every resize. Every segment is
---- `{ anim, dy, height }` and the sign is baked in at build, so this is one multiply per
---- segment and no knowledge of the chain's shape.
-function Look.ArmBounce(group, size)
-  for _, seg in ipairs(group.segments) do
-    seg.anim:SetOffset(0, seg.dy * size * Look.BOUNCE_HEIGHT * seg.height)
-  end
-end
-
---- A ball DROPPED and left to settle. It starts AT its apex and falls -- the differentiation
---- from a plain mark is there on the first frame rather than a fifth of a second in, which is
---- most of what a glance is. Heights fall as BOUNCE_E^i and arc times as their SQUARE ROOT,
---- because under constant gravity time goes as the root of height -- so the settle quickens on
---- its own, and that quickening is what reads as *dropped* rather than as blinking on a timer.
----
---- The chain is: an instant snap to the release height, then fall, rise, fall, rise, fall...
---- each segment smoothed IN going down (accelerating into the landing) and OUT coming up
---- (decelerating to the apex), then the rest. A translation's offset ACCUMULATES across the
---- group rather than being measured from the layout position, which is what makes a chain of
---- deltas the way to express this, and why it sums to ZERO by construction: what a looping
---- group does with one that does not is unmeasured, and this one never asks
---- (frames-textures-animation.md, the Lua-setter table).
----
---- ⚠ The snap is a ZERO-DURATION Translation, which is Blizzard's own idiom for exactly this
---- (`Blizzard_MajorFactionRenownToast.xml` offsets a glow line +242 at `duration="0.0"` and
---- translates it back over 0.43s). If a client ever declines to apply one, the symptom is
---- specific and worth recognising: every fall after it goes BELOW the plate instead of down to
---- it, because the chain is deltas and the first one went missing.
----
---- Armed here, looping, and not played -- `SetLit` starts it.
-function Look.Bounce(region)
+function Look.Pulse(region)
   local group = region:CreateAnimationGroup()
-  local segments, order = {}, 0
-
-  local function Add(height, dy, seconds, smoothing)
-    local anim = group:CreateAnimation("Translation")
-    order = order + 1
-    anim:SetDuration(seconds)
-    anim:SetOrder(order)
-    if smoothing ~= nil then anim:SetSmoothing(smoothing) end
-    segments[#segments + 1] = { anim = anim, dy = dy, height = height }
-  end
-
-  -- Half-arc times, unnormalised: a full hop of height h takes sqrt(h), so half of one takes
-  -- half that. The drop is a single half-arc; every bounce after it is a rise and a fall.
-  local heights, half, total = {}, {}, 0
-  for i = 1, Look.BOUNCE_HOPS do
-    local h = Look.BOUNCE_E ^ (i - 1)
-    heights[i] = h
-    half[i] = math.sqrt(h) / 2
-    total = total + half[i] * (i == 1 and 1 or 2)
-  end
-  local k = Look.BOUNCE_SECONDS * (1 - Look.BOUNCE_REST) / total
-
-  Add(heights[1], 1, 0)                                  -- released at the apex
-  for i = 1, Look.BOUNCE_HOPS do
-    if i > 1 then Add(heights[i], 1, half[i] * k, "OUT") end
-    Add(heights[i], -1, half[i] * k, "IN")
-  end
-
-  local rest = group:CreateAnimation("Translation")
-  rest:SetDuration(Look.BOUNCE_SECONDS * Look.BOUNCE_REST)
-  rest:SetOrder(order + 1)
-  rest:SetOffset(0, 0)
-
-  group.segments = segments
-  Look.ArmBounce(group, region:GetHeight() or 0)
+  local out = group:CreateAnimation("Scale")
+  out:SetScaleFrom(1, 1)
+  out:SetScaleTo(Look.PULSE_SCALE, Look.PULSE_SCALE)
+  out:SetDuration(Look.PULSE_SECONDS / 2)
+  out:SetOrder(1)
+  out:SetSmoothing("IN_OUT")
+  local back = group:CreateAnimation("Scale")
+  back:SetScaleFrom(Look.PULSE_SCALE, Look.PULSE_SCALE)
+  back:SetScaleTo(1, 1)
+  back:SetDuration(Look.PULSE_SECONDS / 2)
+  back:SetOrder(2)
+  back:SetSmoothing("IN_OUT")
   group:SetLooping("REPEAT")
   return group
 end
 
 --- One looping turn, armed at build and never started on a threshold. A count's crossing is
 --- never observed; the mark simply spins under the occluder the whole time.
---- The ROTATION comes back too, because urgent runs it at SPIN_SECONDS / URGENT_RATE and the
---- duration lives on the animation rather than on the group.
 function Look.Spin(region)
   local group = region:CreateAnimationGroup()
   local rotation = group:CreateAnimation("Rotation")
@@ -364,5 +246,5 @@ function Look.Spin(region)
   rotation:SetDuration(Look.SPIN_SECONDS)
   group:SetLooping("REPEAT")
   group:Play()
-  return group, rotation
+  return group
 end
