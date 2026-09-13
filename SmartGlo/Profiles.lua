@@ -292,10 +292,13 @@ Profiles.list = {
   -- cannot read dropped -- so a lit icon means "this line's readable conditions hold", never
   -- "cast this now": priority ORDER is not expressible and is not claimed.
   --
-  -- ⚠ FURY IS ABSENT, and for this spec that is the largest omission any profile here carries.
-  -- A primary resource reads secret in every context and the only percent bind built is
-  -- `health%`, so `felblade,if=hero_tree.felscarred&fury<=100` has no form at all. These rungs
-  -- can say a spell is off cooldown inside the right window; never that you can afford it.
+  -- ⚠ FURY IS ABSENT, and the reason is that neither route to it is BUILT -- not that the
+  -- client withholds it. `C_Spell.IsSpellUsable`'s `insufficientPower` is a readable gate
+  -- (no SecretWhen* predicate; measured on Havoc at low Fury) and `UnitPowerPercent` is the
+  -- sibling of the `UnitHealthPercent` the health family already rides. `ready()` covers
+  -- neither: it reads isActive/isEnabled/isOnGCD, and isEnabled is spell-book enablement.
+  -- So these rungs say a spell is off cooldown inside the right window without saying you
+  -- can pay for it.
   --
   -- ⚠ Fel-Scarred's four transforms carry NO subjects of their own. Death Sweep, Annihilation,
   -- Consuming Fire and Abyssal Gaze are overrides that keep their base row's cooldownID, so a
@@ -434,7 +437,10 @@ Profiles.list = {
         subject = 188499,
         when = { t = "and", terms = {
             { t = "and", terms = {
-                { t = "ready", spell = 188499 },
+                { t = "and", terms = {
+                    { t = "ready", spell = 188499 },
+                    { t = "affordable", spell = 188499 },
+                  } },
                 { t = "aura", spell = 162264 },
               } },
             { t = "aura", spell = 452402 },
@@ -445,7 +451,10 @@ Profiles.list = {
         name = "Death Sweep inside Essence Break",
         subject = 188499,
         when = { t = "and", terms = {
-            { t = "ready", spell = 188499 },
+            { t = "and", terms = {
+                { t = "ready", spell = 188499 },
+                { t = "affordable", spell = 188499 },
+              } },
             { t = "aura", spell = 162264 },
           } },
         bind = { family = "presence", aura = 258860, unit = "target", filter = "HARMFUL|PLAYER" },
@@ -454,13 +463,19 @@ Profiles.list = {
       {
         name = "Blade Dance",
         subject = 188499,
-        when = { t = "ready", spell = 188499 },
+        when = { t = "and", terms = {
+            { t = "ready", spell = 188499 },
+            { t = "affordable", spell = 188499 },
+          } },
       },
       {
         name = "Annihilation on Demonsurge",
         subject = 162794,
         when = { t = "and", terms = {
-            { t = "aura", spell = 162264 },
+            { t = "and", terms = {
+                { t = "affordable", spell = 162794 },
+                { t = "aura", spell = 162264 },
+              } },
             { t = "aura", spell = 452402 },
           } },
         urgent = true,
@@ -469,7 +484,10 @@ Profiles.list = {
         name = "Eye Beam empowered by The Hunt",
         subject = 198013,
         when = { t = "and", terms = {
-            { t = "ready", spell = 198013 },
+            { t = "and", terms = {
+                { t = "ready", spell = 198013 },
+                { t = "affordable", spell = 198013 },
+              } },
             { t = "aura", spell = 1271144 },
           } },
         urgent = true,
@@ -477,13 +495,28 @@ Profiles.list = {
       {
         name = "Eye Beam",
         subject = 198013,
-        when = { t = "ready", spell = 198013 },
+        when = { t = "and", terms = {
+            { t = "ready", spell = 198013 },
+            { t = "affordable", spell = 198013 },
+          } },
       },
       {
         name = "Essence Break clear of Eye Beam",
         subject = 258860,
-        when = { t = "ready", spell = 258860 },
+        when = { t = "and", terms = {
+            { t = "ready", spell = 258860 },
+            { t = "affordable", spell = 258860 },
+          } },
         bind = { family = "duration", spell = 198013, cmp = ">", seconds = 4 },
+      },
+      {
+        name = "Felblade with room to generate",
+        subject = 232893,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 452415 },
+            { t = "ready", spell = 232893 },
+          } },
+        bind = { family = "power", power = "fury", cmp = "<", percent = 80 },
       },
       {
         name = "Felblade",

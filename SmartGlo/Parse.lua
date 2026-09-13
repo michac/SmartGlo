@@ -25,11 +25,12 @@ local SECONDARY = {
 --- the CDM's own verdict flags, not charge counts -- a count stays refused, in both bowls.
 local CALLS = {
   ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
-  active = true,
+  active = true, affordable = true,
 }
 
 local BIND_FORMS = "<spell>.stacks >= <n> | <spell>.up [on <unit>] [mine] "
-  .. "| <spell>.cooldown > <n>s | <spell>.cooldown outside <a>s..<b>s | health% < <n>"
+  .. "| <spell>.cooldown > <n>s | <spell>.cooldown outside <a>s..<b>s | health% < <n> "
+  .. "| <primary>% >= <n>"
 
 -- ------------------------------------------------------------------- the lexer
 
@@ -131,7 +132,8 @@ local function Primary(p)
   if base ~= nil then power, projected = base, true end
   if PRIMARY[power] then
     return nil, ("%s is a primary resource, which is never readable -- it belongs in `bind` "
-      .. "as a percent, not in `when`"):format(power)
+      .. "as `%s%% >= <n>`, not in `when`. The readable question about a primary is whether "
+      .. "you can pay for one spell: `affordable(<spell>)`"):format(power, power)
   end
   if string.match(power, "%.stacks$") or string.match(power, "%.cooldown$") then
     return nil, ("%s is a sealed term and belongs in `bind`, not in `when`"):format(power)
@@ -307,8 +309,36 @@ local function ParseBind(text, scope)
     return { family = "health", cmp = cmp, percent = value }
   end
 
+  -- A primary resource as a percent. Same mechanism as health, different bar, so it is its
+  -- own family: `UnitPowerPercent` is `UnitHealthPercent`'s sibling and evaluates the curve
+  -- in C. Checked after `health%`, which would otherwise match here as a power named health.
+  local powerWord
+  powerWord, cmp, pct = string.match(text, "^([a-z_]+)%%%s*([<>]=?)%s*([%d%.]+)$")
+  if powerWord ~= nil then
+    if SECONDARY[powerWord] then
+      return nil, ("%s is a secondary resource and reads plain -- write it in `when` as a "
+        .. "count, not in `bind` as a percent"):format(powerWord)
+    end
+    if not PRIMARY[powerWord] then
+      return nil, ("unknown resource %q; a percent bind reads `health%%` or a primary")
+        :format(powerWord)
+    end
+    local value = tonumber(pct)
+    if value == nil or value <= 0 or value >= 100 then
+      return nil, ("%s%% %s %s never changes; the threshold has to sit strictly between 0 "
+        .. "and 100"):format(powerWord, cmp, pct)
+    end
+    return { family = "power", power = powerWord, cmp = cmp, percent = value }
+  end
+
   local head = string.match(text, "^(%S+)") or text
   local bare = string.match(head, "^([^%.]+)")
+  -- The only sink is a percent curve, so a primary written as a bare count has no form at
+  -- all. Naming the missing `%` is the whole fix.
+  if PRIMARY[bare] then
+    return nil, ("%s is a primary resource and its only sink is a percent curve -- write "
+      .. "`%s%% >= <n>`, not a bare count"):format(bare, bare)
+  end
   if SECONDARY[bare] then
     return nil, ("%s is a secondary resource and reads plain -- it belongs in `when`, "
       .. "not `bind`"):format(bare)

@@ -20,10 +20,14 @@ local SECONDARY = {
   runes = "Runes",
 }
 
---- Every primary reads secret in every context, so one can never answer a boolean.
+--- Every primary reads secret in every context, so one can never answer a boolean. It is
+--- still PAINTABLE: `UnitPowerPercent(unit, type, usePredicted, curve)` evaluates a curve in
+--- C exactly as `UnitHealthPercent` does, which is what the `power` bind family rides. The
+--- value is the `Enum.PowerType` key, so this table is the map as well as the membership test.
 local PRIMARY = {
-  mana = true, rage = true, focus = true, energy = true, runic_power = true,
-  fury = true, pain = true, insanity = true, maelstrom = true,
+  mana = "Mana", rage = "Rage", focus = "Focus", energy = "Energy",
+  runic_power = "RunicPower", fury = "Fury", pain = "Pain", insanity = "Insanity",
+  maelstrom = "Maelstrom",
 }
 
 --- Which resources may carry `.after_cast`. Not every secondary can: the Tier-1 energize
@@ -43,13 +47,13 @@ local CMP = {
 
 --- The bowl catalogue: a term named on the wrong side is refused BY NAME in both directions,
 --- which is what makes the sorting enforced rather than remembered.
-local SEALED_FAMILY = { count = true, duration = true, presence = true }
+local SEALED_FAMILY = { count = true, duration = true, presence = true, power = true }
 
 --- Every readable term that is a call over ONE spell. Named once: the checker, the renderer
 --- and the trigger table all ask this, so a new call cannot be half-added.
 local SPELL_TERM = {
   ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
-  active = true,
+  active = true, affordable = true,
 }
 
 local READABLE_TERM = { resource = true }
@@ -66,6 +70,16 @@ local UNBOUNDED_BELOW = { ["<"] = true, ["<="] = true, outside = true }
 
 function Rules.PowerType(name)
   local key = SECONDARY[name]
+  if key == nil then return nil end
+  if type(Enum) ~= "table" or type(Enum.PowerType) ~= "table" then return nil end
+  return Enum.PowerType[key]
+end
+
+--- The `Enum.PowerType` a primary names, for the percent bind. Deliberately NOT folded into
+--- `Rules.PowerType`: that one answers for the readable bowl, where a primary must keep
+--- reading as an unknown resource rather than resolving to a power it may never branch on.
+function Rules.PrimaryPowerType(name)
+  local key = PRIMARY[name]
   if key == nil then return nil end
   if type(Enum) ~= "table" or type(Enum.PowerType) ~= "table" then return nil end
   return Enum.PowerType[key]
@@ -213,6 +227,16 @@ local function CheckBind(bind, when, errs)
       table.insert(errs, ("unknown health comparison %q"):format(tostring(bind.cmp)))
     elseif type(bind.percent) ~= "number" or bind.percent <= 0 or bind.percent >= 100 then
       table.insert(errs, "a health bind needs a percent strictly between 0 and 100")
+    end
+  elseif bind.family == "power" then
+    if PRIMARY[bind.power] == nil then
+      table.insert(errs, ("%q is not a primary resource; a power bind reads one of mana, "
+        .. "rage, focus, energy, runic_power, fury, pain, insanity, maelstrom")
+        :format(tostring(bind.power)))
+    elseif CMP[bind.cmp] == nil or bind.cmp == "==" then
+      table.insert(errs, ("unknown power comparison %q"):format(tostring(bind.cmp)))
+    elseif type(bind.percent) ~= "number" or bind.percent <= 0 or bind.percent >= 100 then
+      table.insert(errs, "a power bind needs a percent strictly between 0 and 100")
     end
   elseif READABLE_TERM[bind.family] then
     table.insert(errs, ("%s is readable and belongs in `when`, not in `bind`"):format(bind.family))
@@ -404,6 +428,67 @@ local function EvalReady(term, trace)
   local verdict = ns.F
   if (not active or onGCD) and enabled ~= false then verdict = ns.T end
   trace[#trace + 1] = { text = "ready(" .. Rules.Pretty(term.spell) .. ")", verdict = verdict }
+  return verdict
+end
+
+--- Can the player pay for this spell RIGHT NOW -- the one readable question about a primary
+--- resource, and the reason most rules never need a percent bind at all.
+---
+--- `C_Spell.IsSpellUsable(spellID) -> isUsable, insufficientPower` carries `SecretArguments =
+--- "AllowedWhenTainted"` and -- decisively -- no `SecretReturns` and no `SecretWhen*`
+--- predicate at all, so both returns are plain booleans from tainted code
+--- `[T1 src: SpellDocumentation.lua:873-888]`. Measured on this spec: `[client 2026-08-03]`
+--- sampled Havoc at low Fury and Eye Beam, Blade Dance and Chaos Strike all read
+--- `isUsable=false / insufficientPower=true` while Throw Glaive read `true/false` in the SAME
+--- sample -- which is what proves the flag is computed per spell against its own cost rather
+--- than reporting one bar.
+---
+--- ⚠ It is BINARY: false at 40 Fury and at 170 alike. Overcap is unrecoverable through it, so
+--- "am I about to waste Fury" is the `power` bind's question and never this one.
+---
+--- ⚠ This is NOT what `ready()` answers. That reads `isActive`/`isEnabled`/`isOnGCD` off
+--- `GetSpellCooldown`, and `isEnabled` is spell-book enablement, not power. The two compose:
+--- `ready(x) and affordable(x)` is off cooldown AND payable, and each half fails dark alone.
+local function EvalAffordable(term, trace)
+  local label = ("affordable(%s)"):format(Rules.Pretty(term.spell))
+  if not Knowable(term.spell) then
+    trace[#trace + 1] = { text = label
+      .. ": you do not know this spell, and no laid-out row is showing it",
+      verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  if C_Spell == nil or C_Spell.IsSpellUsable == nil then
+    trace[#trace + 1] = { text = label .. ": C_Spell.IsSpellUsable is absent",
+      verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  local ok, usable, insufficient = pcall(C_Spell.IsSpellUsable, term.spell)
+  if not ok then
+    trace[#trace + 1] = { text = label .. ": " .. tostring(usable), verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  -- Neither return is documented as ever secret, so a non-boolean is the client having
+  -- changed under us. UNKNOWN, never a guess: a fabricated `false` here would read as "you
+  -- cannot afford anything" and take the whole profile dark.
+  if ns.IsSecret(insufficient) or type(insufficient) ~= "boolean" then
+    trace[#trace + 1] = { text = label .. ": insufficientPower not readable",
+      verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  -- The QUESTION is affordability alone. `isUsable` is false for an unaffordable spell but
+  -- also for one out of range or otherwise blocked, so answering from it would make this term
+  -- mean something wider than its name -- and `insufficientPower` is documented as the
+  -- specifically-power flag. It is read for the trace only.
+  local verdict = insufficient and ns.F or ns.T
+  local why = label
+  if insufficient then
+    why = label .. ": not enough power"
+  elseif ns.IsSecret(usable) or type(usable) ~= "boolean" then
+    why = label .. " (power is fine; isUsable unreadable)"
+  elseif not usable then
+    why = label .. " (power is fine; unusable for another reason)"
+  end
+  trace[#trace + 1] = { text = why, verdict = verdict }
   return verdict
 end
 
@@ -689,6 +774,8 @@ function Eval(term, trace)
     return EvalCharges(term, trace, false)
   elseif term.t == "active" then
     return EvalActive(term, trace)
+  elseif term.t == "affordable" then
+    return EvalAffordable(term, trace)
   elseif term.t == "talent" then
     return EvalTalent(term, trace)
   end
@@ -734,6 +821,11 @@ local TRIGGERS = {
   active = { "SPELL_UPDATE_COOLDOWN", "UNIT_AURA" },
   at_max_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
   no_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
+  -- `SPELL_UPDATE_USABLE` is what the client refreshes its OWN power tint on
+  -- (`RefreshIconColor` from `OnSpellUpdateUsableEvent`, cooldown-manager.md §5), so it is the
+  -- event that matches this term exactly. The power pair catches a bar that moved without it.
+  -- ⚠ §5 notes `SPELL_UPDATE_USABLE` "fires constantly in a city"; `ready()` already pays that.
+  affordable = { "SPELL_UPDATE_USABLE", "UNIT_POWER_UPDATE", "UNIT_MAXPOWER" },
   -- ⚠ NOT the events that make a talent readable -- those are handled by the prime above,
   -- out of combat. These are here so a glow carrying a talent term still re-evaluates when
   -- the trigger union is what drives the attach path.
@@ -784,6 +876,9 @@ function Rules.DescribeBind(bind, scope)
   end
   if bind.family == "health" then
     return ("health%% %s %s"):format(bind.cmp, bind.percent)
+  end
+  if bind.family == "power" then
+    return ("%s%% %s %s"):format(tostring(bind.power), bind.cmp, bind.percent)
   end
   if bind.family == "presence" then
     local body = ("%s.up"):format(Rules.Label(bind.aura, scope))

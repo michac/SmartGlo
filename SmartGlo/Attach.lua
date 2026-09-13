@@ -508,10 +508,11 @@ local function Note(glow, verdict, trace)
     #parts > 0 and table.concat(parts, ", ") or "no terms")
 end
 
---- Both sealed families write the mark's alpha themselves, so `Overlay.SetLit` must leave
---- that channel alone for either of them.
+--- Every sealed family that writes the mark's alpha itself, so `Overlay.SetLit` must leave
+--- that channel alone for all of them.
 local function SealsAlpha(glow)
-  return ns.Duration.Owns(glow) or ns.Health.Owns(glow) or ns.Presence.Owns(glow)
+  return ns.Duration.Owns(glow) or ns.Health.Owns(glow) or ns.Power.Owns(glow)
+    or ns.Presence.Owns(glow)
 end
 
 function Attach.Evaluate()
@@ -544,6 +545,7 @@ function Attach.Evaluate()
   end
   ns.Duration.Refresh()
   ns.Health.Refresh()
+  ns.Power.Refresh()
   ns.Presence.Rebuild()
   ns.Procs.Refresh()
 end
@@ -754,6 +756,9 @@ local function Report(only)
           ns.Presence.Describe(glow))
       elseif ns.Health.Owns(glow) then
         lines[#lines + 1] = ("    %s -- %s"):format(ns.Health.Describe(glow.bind),
+          ns.Rules.DescribeBind(glow.bind))
+      elseif ns.Power.Owns(glow) then
+        lines[#lines + 1] = ("    %s -- %s"):format(ns.Power.Describe(glow.bind),
           ns.Rules.DescribeBind(glow.bind))
       elseif glow.bind ~= nil then
         lines[#lines + 1] = ("    [sealed] %s"):format(ns.Rules.DescribeBind(glow.bind))
