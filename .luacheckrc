@@ -32,6 +32,7 @@ stds.wow = {
     "UnitPower",
     "UnitPowerDisplayMod",
     "UnitHealthPercent",
+    "UnitPowerPercent",
     "Enum",
     "C_Traits",
     "C_ClassTalents",
