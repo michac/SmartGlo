@@ -526,6 +526,151 @@ Profiles.list = {
     },
   },
 
+  -- From the simc `balance` list, Elune's Chosen branches taken, plus Icy Veins' 12.1
+  -- rotation page, which marks that tree "best choice" for both single-target and AoE. Same
+  -- contract as the other profiles: a lit icon is a rung whose readable conditions hold, not
+  -- an instruction, and several light at once.
+  --
+  -- ⚠ Moonfire and Sunfire have NO rungs. Every APL line for them asks whether the DoT is
+  -- about to fall off, and the presence family can only say it is up -- the inverse. The .sg
+  -- says so at length; do not read their absence here as an oversight.
+  --
+  -- ⚠ The twin of `rules/balance-eluneschosen.sg`. Nothing regenerates it on a build: what
+  -- holds the two together is `Parse.Render` equality, so edit the .sg and re-render rather
+  -- than hand-editing here.
+  ["balance-eluneschosen"] = {
+    label = "Balance — Elune's Chosen",
+    glows = {
+      {
+        name = "Fury of Elune on cooldown",
+        subject = 202770,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 429539 },
+            { t = "ready", spell = 202770 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Fury of Elune clear of Celestial Alignment",
+        subject = 202770,
+        when = { t = "and", terms = {
+            { t = "not", term = { t = "talent", spell = 429539 } },
+            { t = "ready", spell = 202770 },
+          } },
+        bind = { family = "duration", spell = 194223, cmp = ">", seconds = 10 },
+      },
+      {
+        name = "Force of Nature with Astral Power to bank",
+        subject = 205636,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "ready", spell = 205636 },
+                { t = "aura", spell = 1239669 },
+              } },
+            { t = "not", term = { t = "ready", spell = 194223 } },
+          } },
+        bind = { family = "power", power = "astral_power", cmp = "<", percent = 50 },
+      },
+      {
+        name = "Celestial Alignment",
+        subject = 194223,
+        when = { t = "ready", spell = 194223 },
+      },
+      {
+        name = "Convoke the Spirits inside Celestial Alignment",
+        subject = 391528,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 391528 },
+            { t = "aura", spell = 194223 },
+          } },
+        bind = { family = "power", power = "astral_power", cmp = "<", percent = 40 },
+        urgent = true,
+      },
+      {
+        name = "Eclipse before capping charges",
+        subject = 1233346,
+        when = { t = "at_max_charges", spell = 1233346 },
+        urgent = true,
+      },
+      {
+        name = "Eclipse",
+        subject = 1233346,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 1233346 },
+            { t = "not", term = { t = "aura", spell = 1239669 } },
+          } },
+      },
+      {
+        name = "Starsurge on Starweaver's Weft",
+        subject = 78674,
+        when = { t = "and", terms = {
+            { t = "affordable", spell = 78674 },
+            { t = "aura", spell = 393944 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Starsurge before capping Astral Power",
+        subject = 78674,
+        when = { t = "affordable", spell = 78674 },
+        bind = { family = "power", power = "astral_power", cmp = ">", percent = 80 },
+        urgent = true,
+      },
+      {
+        name = "Starfall on Starweaver's Warp",
+        subject = 191034,
+        when = { t = "and", terms = {
+            { t = "affordable", spell = 191034 },
+            { t = "aura", spell = 393942 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Starfall on Touch the Cosmos",
+        subject = 191034,
+        when = { t = "and", terms = {
+            { t = "affordable", spell = 191034 },
+            { t = "aura", spell = 450356 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Starfall",
+        subject = 191034,
+        when = { t = "affordable", spell = 191034 },
+      },
+      {
+        name = "Moon chain with room to generate",
+        subject = 274281,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 274281 },
+            { t = "ready", spell = 274281 },
+          } },
+        bind = { family = "power", power = "astral_power", cmp = "<", percent = 60 },
+      },
+      {
+        name = "Wild Mushroom inside Eclipse",
+        subject = 88747,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "talent", spell = 88747 },
+                { t = "ready", spell = 88747 },
+              } },
+            { t = "aura", spell = 1239669 },
+          } },
+      },
+      {
+        name = "Starfire empowered by Ascendant Fires",
+        subject = 194153,
+        when = { t = "and", terms = {
+            { t = "aura", spell = 1263363 },
+            { t = "aura", spell = 48518 },
+          } },
+        urgent = true,
+      },
+    },
+  },
+
   -- From the simc `protection` list, Method's 12.1 priority, and the class KB's own
   -- active-mitigation loop. Same contract as the other profiles: a lit icon is a rung whose
   -- readable conditions hold, not an instruction, and several light at once.

@@ -16,6 +16,7 @@ local COMPARISONS = { [">="] = true, [">"] = true, ["<="] = true, ["<"] = true, 
 local PRIMARY = {
   mana = true, rage = true, focus = true, energy = true, runic_power = true,
   fury = true, pain = true, insanity = true, maelstrom = true,
+  astral_power = true,
 }
 local SECONDARY = {
   soul_shards = true, holy_power = true, combo_points = true, chi = true,

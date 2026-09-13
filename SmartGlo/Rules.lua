@@ -28,6 +28,8 @@ local PRIMARY = {
   mana = "Mana", rage = "Rage", focus = "Focus", energy = "Energy",
   runic_power = "RunicPower", fury = "Fury", pain = "Pain", insanity = "Insanity",
   maelstrom = "Maelstrom",
+  -- Astral Power's PowerType is spelled `LunarPower`; the bar's display name is not its key.
+  astral_power = "LunarPower",
 }
 
 --- Which resources may carry `.after_cast`. Not every secondary can: the Tier-1 energize
@@ -231,7 +233,8 @@ local function CheckBind(bind, when, errs)
   elseif bind.family == "power" then
     if PRIMARY[bind.power] == nil then
       table.insert(errs, ("%q is not a primary resource; a power bind reads one of mana, "
-        .. "rage, focus, energy, runic_power, fury, pain, insanity, maelstrom")
+        .. "rage, focus, energy, runic_power, fury, pain, insanity, maelstrom, "
+        .. "astral_power")
         :format(tostring(bind.power)))
     elseif CMP[bind.cmp] == nil or bind.cmp == "==" then
       table.insert(errs, ("unknown power comparison %q"):format(tostring(bind.cmp)))

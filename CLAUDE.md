@@ -27,9 +27,9 @@ whose failure you want to tell apart, and keep `err`; a discarded error is a fab
 result. A UI that renders nothing must render why.
 
 The rule predicates read the player's own **secondary** resources, which are never secret.
-Every **primary** — Mana, Rage, Focus, Energy, Runic Power, Fury, Pain, Insanity, Maelstrom —
-reads secret through `UnitPower`, so a primary can never be a readable gate. It is still
-reachable, two ways, and a rule that wants one must take one of them:
+Every **primary** — Mana, Rage, Focus, Energy, Runic Power, Fury, Pain, Insanity,
+Maelstrom, Astral Power — reads secret through `UnitPower`, so a primary can never be a
+readable gate. It is still reachable, two ways, and a rule that wants one must take one:
 
 - `affordable(<spell>)` — `C_Spell.IsSpellUsable`'s `insufficientPower` is a plain boolean, so
   "can I pay for this" is a gate like any other. Prefer it; it asks the question the rule
