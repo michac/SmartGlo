@@ -288,6 +288,211 @@ Profiles.list = {
     },
   },
 
+  -- Transcribed from the simc `havoc` list. Each glow is one APL line with the terms the addon
+  -- cannot read dropped -- so a lit icon means "this line's readable conditions hold", never
+  -- "cast this now": priority ORDER is not expressible and is not claimed.
+  --
+  -- ⚠ FURY IS ABSENT, and for this spec that is the largest omission any profile here carries.
+  -- A primary resource reads secret in every context and the only percent bind built is
+  -- `health%`, so `felblade,if=hero_tree.felscarred&fury<=100` has no form at all. These rungs
+  -- can say a spell is off cooldown inside the right window; never that you can afford it.
+  --
+  -- ⚠ Fel-Scarred's four transforms carry NO subjects of their own. Death Sweep, Annihilation,
+  -- Consuming Fire and Abyssal Gaze are overrides that keep their base row's cooldownID, so a
+  -- demon-form rung is written on the base -- blade_dance, chaos_strike, immolation_aura,
+  -- eye_beam -- with `aura(metamorphosis)` saying which half of the button it is about. Same
+  -- untested path as Ruination and Infernal Bolt above.
+  --
+  -- ⚠ `aura(demonsurge)` stands in for THREE per-ability APL terms
+  -- (`action.<spell>.demonsurge_available`). Nothing readable can ask which empowerment is
+  -- pending, only whether the window is live.
+  --
+  -- ⚠ The twin of `rules/havoc-felscarred.sg`. Nothing regenerates it on a build: what holds
+  -- the two together is `Parse.Render` equality, so edit the .sg and re-render rather than
+  -- hand-editing here.
+  ["havoc-felscarred"] = {
+    label = "Havoc — Fel-Scarred",
+    glows = {
+      {
+        name = "Immolation Aura drained before Metamorphosis",
+        subject = 258920,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "talent", spell = 452409 },
+                { t = "talent", spell = 427775 },
+              } },
+            { t = "not", term = { t = "ready", spell = 191427 } },
+          } },
+        bind = { family = "duration", spell = 191427, cmp = "<", seconds = 5 },
+        urgent = true,
+      },
+      {
+        name = "Immolation Aura at two charges",
+        subject = 258920,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 427775 },
+            { t = "at_max_charges", spell = 258920 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Consuming Fire on Demonsurge",
+        subject = 258920,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "talent", spell = 452415 },
+                { t = "aura", spell = 162264 },
+              } },
+            { t = "aura", spell = 452402 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Metamorphosis without Chaotic Transformation",
+        subject = 191427,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "not", term = { t = "talent", spell = 388112 } },
+                { t = "ready", spell = 191427 },
+              } },
+            { t = "not", term = { t = "aura", spell = 452402 } },
+          } },
+      },
+      {
+        name = "Metamorphosis with Blade Dance spent",
+        subject = 191427,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "talent", spell = 388112 },
+                    { t = "ready", spell = 191427 },
+                  } },
+                { t = "not", term = { t = "ready", spell = 188499 } },
+              } },
+            { t = "not", term = { t = "aura", spell = 452402 } },
+          } },
+        bind = { family = "duration", spell = 198013, cmp = ">", seconds = 8 },
+      },
+      {
+        name = "The Hunt into the next Eye Beam",
+        subject = 370965,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "talent", spell = 1270898 },
+                { t = "ready", spell = 370965 },
+              } },
+            { t = "not", term = { t = "ready", spell = 198013 } },
+          } },
+        bind = { family = "duration", spell = 191427, cmp = ">", seconds = 15 },
+      },
+      {
+        name = "The Hunt with Metamorphosis up",
+        subject = 370965,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "talent", spell = 1270898 },
+                    { t = "ready", spell = 370965 },
+                  } },
+                { t = "ready", spell = 191427 },
+              } },
+            { t = "not", term = { t = "ready", spell = 198013 } },
+          } },
+      },
+      {
+        name = "The Hunt without Eternal Hunt",
+        subject = 370965,
+        when = { t = "and", terms = {
+            { t = "not", term = { t = "talent", spell = 1270898 } },
+            { t = "ready", spell = 370965 },
+          } },
+      },
+      {
+        name = "Vengeful Retreat to keep Exergy up",
+        subject = 198793,
+        when = { t = "and", terms = {
+            { t = "talent", spell = 206476 },
+            { t = "ready", spell = 198793 },
+          } },
+      },
+      {
+        name = "Felblade to cash Inertia",
+        subject = 232893,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "and", terms = {
+                    { t = "talent", spell = 427640 },
+                    { t = "ready", spell = 232893 },
+                  } },
+                { t = "not", term = { t = "aura", spell = 427640 } },
+              } },
+            { t = "not", term = { t = "ready", spell = 198793 } },
+          } },
+      },
+      {
+        name = "Death Sweep on Demonsurge",
+        subject = 188499,
+        when = { t = "and", terms = {
+            { t = "and", terms = {
+                { t = "ready", spell = 188499 },
+                { t = "aura", spell = 162264 },
+              } },
+            { t = "aura", spell = 452402 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Death Sweep inside Essence Break",
+        subject = 188499,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 188499 },
+            { t = "aura", spell = 162264 },
+          } },
+        bind = { family = "presence", aura = 258860, unit = "target", filter = "HARMFUL|PLAYER" },
+        urgent = true,
+      },
+      {
+        name = "Blade Dance",
+        subject = 188499,
+        when = { t = "ready", spell = 188499 },
+      },
+      {
+        name = "Annihilation on Demonsurge",
+        subject = 162794,
+        when = { t = "and", terms = {
+            { t = "aura", spell = 162264 },
+            { t = "aura", spell = 452402 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Eye Beam empowered by The Hunt",
+        subject = 198013,
+        when = { t = "and", terms = {
+            { t = "ready", spell = 198013 },
+            { t = "aura", spell = 1271144 },
+          } },
+        urgent = true,
+      },
+      {
+        name = "Eye Beam",
+        subject = 198013,
+        when = { t = "ready", spell = 198013 },
+      },
+      {
+        name = "Essence Break clear of Eye Beam",
+        subject = 258860,
+        when = { t = "ready", spell = 258860 },
+        bind = { family = "duration", spell = 198013, cmp = ">", seconds = 4 },
+      },
+      {
+        name = "Felblade",
+        subject = 232893,
+        when = { t = "ready", spell = 232893 },
+      },
+    },
+  },
+
   -- From the simc `protection` list, Method's 12.1 priority, and the class KB's own
   -- active-mitigation loop. Same contract as the other profiles: a lit icon is a rung whose
   -- readable conditions hold, not an instruction, and several light at once.
