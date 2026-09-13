@@ -28,6 +28,16 @@ result. A UI that renders nothing must render why.
 
 The rule predicates read the player's own **secondary** resources, which are never secret.
 Every **primary** — Mana, Rage, Focus, Energy, Runic Power, Fury, Pain, Insanity, Maelstrom —
-reads secret in every context, so a threshold on one cannot be evaluated and must not be
-offered as a rule. The mechanism is
+reads secret through `UnitPower`, so a primary can never be a readable gate. It is still
+reachable, two ways, and a rule that wants one must take one of them:
+
+- `affordable(<spell>)` — `C_Spell.IsSpellUsable`'s `insufficientPower` is a plain boolean, so
+  "can I pay for this" is a gate like any other. Prefer it; it asks the question the rule
+  usually means, and costs no sealed leaf.
+- `bind <primary>% >= <n>` — `UnitPowerPercent(unit, powerType, usePredicted, curve)` evaluates
+  a curve in C exactly as `UnitHealthPercent` does, so a threshold is a sealed bind that owns
+  the art's alpha. `Power.lua` is `Health.lua`'s twin with an `Enum.PowerType` argument.
+
+⚠ `ready()` is not the affordability gate — a spell off cooldown with no Fury is `ready()`.
+The mechanism for all of it is
 `knowledge/addon-dev/security-taint-and-restricted-data.md` §4.12.
