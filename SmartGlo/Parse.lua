@@ -26,12 +26,17 @@ local SECONDARY = {
 --- the CDM's own verdict flags, not charge counts -- a count stays refused, in both bowls.
 local CALLS = {
   ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
-  active = true, affordable = true,
+  active = true, affordable = true, refreshable = true,
 }
 
+--- The calls that name an AURA rather than something the spec learns. `refreshable()` is
+--- `aura()`'s sibling -- same namespace, same tracked row, same three values -- so the
+--- namespace test is a set rather than one equality.
+local AURA_CALL = { aura = true, refreshable = true }
+
 local BIND_FORMS = "<spell>.stacks >= <n> | <spell>.up [on <unit>] [mine] "
-  .. "| <spell>.cooldown > <n>s | <spell>.cooldown outside <a>s..<b>s | health% < <n> "
-  .. "| <primary>% >= <n>"
+  .. "| <spell>.cooldown > <n>s | <spell>.cooldown outside <a>s..<b>s "
+  .. "| <aura>.remains < <n>s | health% < <n> | <primary>% >= <n>"
 
 -- ------------------------------------------------------------------- the lexer
 
@@ -116,7 +121,7 @@ local function Primary(p)
     if not closed then return nil, closeWhy end
     -- The term picks the namespace: `aura()` reads a tracked row, everything else reads
     -- something the spec learns, and the same word can be both.
-    local kind = tok.text == "aura" and "aura" or "ability"
+    local kind = AURA_CALL[tok.text] and "aura" or "ability"
     local spell, resolveWhy = ns.Names.Resolve(ref.text, p.scope, kind)
     if spell == nil then return nil, resolveWhy end
     return { t = tok.text, spell = spell }
@@ -274,6 +279,16 @@ local function ParseBind(text, scope)
       seconds = tonumber(n), absent = absent }
   end
 
+  -- `<aura>.remains <cmp> <n>s` -- an AURA's remaining time, in seconds, not a cooldown's.
+  -- The distinct suffix is what keeps it off `.cooldown`: the two read different clocks and
+  -- only this one is the client's own aura duration.
+  ref, cmp, n = string.match(text, "^(.-)%.remains%s*([<>]=?)%s*([%d%.]+)s$")
+  if ref ~= nil then
+    local aura, why = ResolveAura(ref0(ref), scope)
+    if aura == nil then return nil, why end
+    return { family = "remains", aura = aura, cmp = cmp, seconds = tonumber(n) }
+  end
+
   -- `<spell>.up [on <unit>] [mine]`. The unit picks the default filter, because the useful
   -- pair is a buff on you and a debuff on your target; `mine` adds PLAYER, which NARROWS to
   -- auras you applied rather than being what you are limited to.
@@ -292,7 +307,10 @@ local function ParseBind(text, scope)
     if unit ~= "player" and unit ~= "target" then
       return nil, ("unknown unit %q; a presence bind reads `player` or `target`"):format(unit)
     end
-    local aura, why = ResolveAura(ref0(spellRef), scope)
+    -- The `presence` namespace, not `aura`: this family reads through an AuraContainer
+    -- rather than a Cooldown Manager row, so a rowless debuff spelled `<slug>_<id>` resolves
+    -- here and nowhere else.
+    local aura, why = ns.Names.Resolve(ref0(spellRef), scope, "presence")
     if aura == nil then return nil, why end
     local filter = unit == "target" and "HARMFUL" or "HELPFUL"
     if mine then filter = filter .. "|PLAYER" end

@@ -49,14 +49,20 @@ local CMP = {
 
 --- The bowl catalogue: a term named on the wrong side is refused BY NAME in both directions,
 --- which is what makes the sorting enforced rather than remembered.
-local SEALED_FAMILY = { count = true, duration = true, presence = true, power = true }
+local SEALED_FAMILY = {
+  count = true, duration = true, presence = true, power = true, remains = true,
+}
 
 --- Every readable term that is a call over ONE spell. Named once: the checker, the renderer
 --- and the trigger table all ask this, so a new call cannot be half-added.
 local SPELL_TERM = {
   ready = true, aura = true, talent = true, at_max_charges = true, no_charges = true,
-  active = true, affordable = true,
+  active = true, affordable = true, refreshable = true,
 }
+
+--- The two of those that name an AURA rather than something the spec learns. `Parse.lua`
+--- keeps the same set for resolving; this one is for printing the id back.
+local AURA_TERM = { aura = true, refreshable = true }
 
 local READABLE_TERM = { resource = true }
 for name in pairs(SPELL_TERM) do READABLE_TERM[name] = true end
@@ -64,6 +70,11 @@ for name in pairs(SPELL_TERM) do READABLE_TERM[name] = true end
 --- The filter components a presence bind may name. A subset of `AuraUtil.AuraFilters` on
 --- purpose: these are the ones the grammar can produce, and the client asserts on the rest.
 local FILTER_COMPONENT = { HELPFUL = true, HARMFUL = true, PLAYER = true }
+
+--- The sealed families whose occluder rides over a normally-lit mark, so the client hiding
+--- the button takes the occluder away and leaves the mark bright. Each one needs the implicit
+--- `aura()` term `Rules.Gate` adds; see the comment there.
+local NEEDS_PRESENCE = { count = true, remains = true }
 
 --- `<` and `outside` on a cooldown are also true at zero remaining, and zero remaining means
 --- the spell is READY -- so such a bind glows permanently while its subject is up unless the
@@ -224,6 +235,15 @@ local function CheckBind(bind, when, errs)
         table.insert(errs, ("unknown aura filter %q"):format(component))
       end
     end
+  elseif bind.family == "remains" then
+    if type(bind.aura) ~= "number" then
+      table.insert(errs, "a remains bind needs a numeric aura id")
+    end
+    if CMP[bind.cmp] == nil or bind.cmp == "==" then
+      table.insert(errs, ("unknown remains comparison %q"):format(tostring(bind.cmp)))
+    elseif type(bind.seconds) ~= "number" or bind.seconds <= 0 then
+      table.insert(errs, "a remains bind needs a positive number of seconds")
+    end
   elseif bind.family == "health" then
     if CMP[bind.cmp] == nil or bind.cmp == "==" then
       table.insert(errs, ("unknown health comparison %q"):format(tostring(bind.cmp)))
@@ -298,8 +318,11 @@ end
 --- the grammar cannot read. `Rules.Pretty` is the one to use for anything a person reads.
 --- ⚠ `scope` is required wherever the result has to parse back as the SAME id; `Names.Of`
 --- says what dropping it costs.
-function Rules.Label(spellID, scope)
-  return ns.Names.Of(spellID, scope) or tostring(spellID)
+--- ⚠ `kind` must be `"aura"` wherever the id was RESOLVED as one. There is no fallback to
+--- the ability table on purpose, exactly as `Parse.ResolveAura` has none: an ability name
+--- printed for an aura id would re-parse to a different spell, which is worse than a number.
+function Rules.Label(spellID, scope, kind)
+  return ns.Names.Of(spellID, scope, kind) or tostring(spellID)
 end
 
 --- The same thing for a HUMAN: the rule symbol when there is one, else the client's own name
@@ -612,6 +635,23 @@ local function EvalAura(term, trace)
   return verdict
 end
 
+--- The refresh window, read the same way and from the same rows. The client does the
+--- arithmetic Blizzard seals -- `GetRefreshExtendedDuration - GetAuraBaseDuration` -- so this
+--- matches an APL's `refreshable` exactly rather than approximating it with a threshold.
+--- A row that cannot produce a window at all is UNKNOWN, never F; `Attach.PandemicLevel`
+--- owns that distinction and supplies the reason.
+local function EvalRefreshable(term, trace)
+  local level, why = ns.Attach.PandemicLevel(term.spell)
+  local label = "refreshable(" .. Rules.Pretty(term.spell) .. ")"
+  if level == nil then
+    trace[#trace + 1] = { text = label .. ": " .. tostring(why), verdict = ns.UNKNOWN }
+    return ns.UNKNOWN
+  end
+  local verdict = level and ns.T or ns.F
+  trace[#trace + 1] = { text = label, verdict = verdict }
+  return verdict
+end
+
 -- ------------------------------------------------------------------ talent()
 --
 -- A talent is a static load condition, so it is an ordinary readable gate -- but it is read
@@ -700,6 +740,13 @@ local function ReadTalent(spellID)
   return nil, why
 end
 
+--- The same read, for a caller that is not a term: `/sg enable` asks whether the hero tree a
+--- profile was written for is the one you are in. Three-valued like everything else -- nil
+--- plus a reason is UNKNOWN, and must not be read as "not talented".
+function Rules.Talent(spellID)
+  return ReadTalent(spellID)
+end
+
 local function EvalTalent(term, trace)
   local selected, why = ReadTalent(term.spell)
   if selected == nil then
@@ -771,6 +818,8 @@ function Eval(term, trace)
     return EvalReady(term, trace)
   elseif term.t == "aura" then
     return EvalAura(term, trace)
+  elseif term.t == "refreshable" then
+    return EvalRefreshable(term, trace)
   elseif term.t == "at_max_charges" then
     return EvalCharges(term, trace, true)
   elseif term.t == "no_charges" then
@@ -802,7 +851,8 @@ end
 function Rules.Gate(glow)
   if glow == nil then return nil end
   local bind = glow.bind
-  if type(bind) ~= "table" or bind.family ~= "count" or type(bind.aura) ~= "number" then
+  if type(bind) ~= "table" or not NEEDS_PRESENCE[bind.family]
+      or type(bind.aura) ~= "number" then
     return glow.when
   end
   local present = { t = "aura", spell = bind.aura }
@@ -821,6 +871,11 @@ local TRIGGERS = {
   resource = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" },
   ready = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_USABLE", "SPELL_UPDATE_CHARGES" },
   aura = {},
+  -- Empty for the same reason `aura` is: `Attach.HookAlerts` hooks `TriggerAlertEvent` and
+  -- evaluates on EVERY alert, so the `PandemicTime` edge (entry) and `OnAuraApplied` (exit,
+  -- on a refresh) already drive one. Nothing latches on those edges -- the field is READ at
+  -- evaluation time -- so the alert only has to make an evaluation happen near the crossing.
+  refreshable = {},
   active = { "SPELL_UPDATE_COOLDOWN", "UNIT_AURA" },
   at_max_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
   no_charges = { "SPELL_UPDATE_COOLDOWN", "SPELL_UPDATE_CHARGES" },
@@ -865,7 +920,7 @@ local function Describe(expr, scope)
     return ("%s%s %s %s"):format(expr.power, expr.projected and ".after_cast" or "",
       expr.cmp, tostring(expr.value))
   elseif SPELL_TERM[expr.t] then
-    return expr.t .. "(" .. Rules.Label(expr.spell, scope) .. ")"
+    return expr.t .. "(" .. Rules.Label(expr.spell, scope, AURA_TERM[expr.t] and "aura") .. ")"
   end
   return tostring(expr.t)
 end
@@ -875,7 +930,7 @@ Rules.Describe = Describe
 function Rules.DescribeBind(bind, scope)
   if type(bind) ~= "table" then return "?" end
   if bind.family == "count" then
-    return ("%s.stacks >= %s"):format(Rules.Label(bind.aura, scope), tostring(bind.threshold))
+    return ("%s.stacks >= %s"):format(Rules.Label(bind.aura, scope, "aura"), tostring(bind.threshold))
   end
   if bind.family == "health" then
     return ("health%% %s %s"):format(bind.cmp, bind.percent)
@@ -884,10 +939,14 @@ function Rules.DescribeBind(bind, scope)
     return ("%s%% %s %s"):format(tostring(bind.power), bind.cmp, bind.percent)
   end
   if bind.family == "presence" then
-    local body = ("%s.up"):format(Rules.Label(bind.aura, scope))
+    local body = ("%s.up"):format(Rules.Label(bind.aura, scope, "presence"))
     if bind.unit ~= "player" then body = body .. " on " .. bind.unit end
     if string.find(bind.filter, "PLAYER", 1, true) then body = body .. " mine" end
     return body
+  end
+  if bind.family == "remains" then
+    return ("%s.remains %s %ss"):format(Rules.Label(bind.aura, scope, "aura"), bind.cmp,
+      tostring(bind.seconds))
   end
   if bind.family == "duration" then
     local body

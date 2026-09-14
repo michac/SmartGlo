@@ -92,6 +92,7 @@ stds.wow = {
     "BINDING_NAME_SMARTGLO_WHY_LOG",
     "SlashCmdList",
     "SmartGloDB",
+    "SmartGloCharDB",
   },
 }
 

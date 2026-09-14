@@ -11,16 +11,28 @@ ns.Names = Names
 
 --- Built on first use and kept: 40 specs x ~170 names is a table nobody wants at load time,
 --- and in practice a session touches one spec.
-local index = { ability = {}, aura = {} }
+-- ⚠ One cache per KIND, and a kind missing here silently borrows `ability`'s -- which is a
+-- resolver that answers from the wrong table rather than an error.
+local index = { ability = {}, aura = {}, presence = {} }
 
 --- Two namespaces, and the TERM picks which. `on` / `ready()` want something the spec can
 --- learn; `aura()` wants something the Cooldown Manager can track. A name in both worlds --
 --- consecration, shield_of_the_righteous -- is a different spell in each, so resolving an
 --- aura against the ability table is not a near miss, it is a wrong answer that parses.
+--- ⚠ `presence` shares the AURA tables and not the aura precondition, which is why it is a
+--- kind of its own. Every other aura-naming family reads through a Cooldown Manager row; a
+--- presence bind reads `C_UnitAuras.GetUnitAuraInstanceIDs(unit, filter)` in untainted
+--- Blizzard code (`Presence.lua`), so a rowless debuff is inside what it can watch and
+--- refusing one would be this table inventing a limit the container does not have.
 local TABLES = {
   ability = { specs = "specs", names = "names" },
   aura = { specs = "auraSpecs", names = "auraNames" },
+  presence = { specs = "auraSpecs", names = "auraNames" },
 }
+
+local function IsAuraKind(kind)
+  return kind == "aura" or kind == "presence"
+end
 
 --- The name an id answers to inside one spec. Two ids of a spec sharing a slug is the norm,
 --- so the generator gives the bare slug to the one a rule can bind to and spells the rest
@@ -28,7 +40,7 @@ local TABLES = {
 --- `hammer_of_wrath_24275` in Protection, where the row carries 1241413.
 function Names.NameIn(key, id, kind)
   local where = TABLES[kind or "ability"] or TABLES.ability
-  if kind ~= "aura" then
+  if not IsAuraKind(kind) then
     local per = ns.Symbols.specNames[key]
     local scoped = per and per[id]
     if scoped ~= nil then return scoped end
@@ -39,6 +51,12 @@ end
 local function IndexFor(key, kind)
   local where = TABLES[kind] or TABLES.ability
   local cache = index[kind] or index.ability
+  if index[kind] == nil and TABLES[kind] ~= nil then
+    -- A kind with a table but no cache would read another kind's index. Better to build it
+    -- than to answer from the wrong namespace.
+    index[kind] = {}
+    cache = index[kind]
+  end
   local built = cache[key]
   if built ~= nil then return built end
   local ids = ns.Symbols[where.specs][key]
@@ -61,7 +79,7 @@ local function IndexFor(key, kind)
     end
     -- An id the sources name twice — a talent and the ability it grants, or the inventory and
     -- the CDM disagreeing on wording — resolves under either name.
-    local also = kind ~= "aura" and ns.Symbols.alsoNamed[id] or nil
+    local also = (not IsAuraKind(kind)) and ns.Symbols.alsoNamed[id] or nil
     if also ~= nil and built[also] == nil then built[also] = id end
   end
   cache[key] = built
@@ -74,6 +92,29 @@ end
 --- so a prefix naming a different spell than the id refuses instead of trusting the number.
 ---
 --- Reached only after the plain lookup missed, so a real name ending in digits still wins.
+--- The second table a presence bind may name, and ONLY through the suffixed spelling.
+---
+--- A rowless debuff -- Essence Break, whose cast and debuff are both 258860 -- is in the
+--- ability inventory and in no tracked set, so the aura table cannot reach it while the
+--- container that watches it needs no row. What makes this safe where a blind fallback would
+--- not be: the suffix states BOTH halves, so the id is checked against the name rather than
+--- trusted. A bare slug still refuses, because for most spells the cast and the aura are
+--- different ids (Moonfire 8921 against 164812) and guessing between them is the error the
+--- split namespace exists to prevent.
+local function PresenceSuffixed(key, text, bare, id)
+  local ids = ns.Symbols.specs[key]
+  if ids ~= nil then
+    for _, one in ipairs(ids) do
+      if one == id then
+        local full = Names.NameIn(key, id, "ability")
+        if full == text or full == bare then return id end
+        return nil, ("%d is %s in %s, not %q"):format(id, tostring(full), key, text)
+      end
+    end
+  end
+  return nil, ("%s carries no spell %d, so %q names nothing here"):format(key, id, text)
+end
+
 local function ResolveSuffixed(key, text, kind)
   local bare, digits = string.match(text, "^(.+)_(%d+)$")
   if bare == nil then return nil end
@@ -85,6 +126,7 @@ local function ResolveSuffixed(key, text, kind)
     if one == id then carried = true break end
   end
   if not carried then
+    if kind == "presence" then return PresenceSuffixed(key, text, bare, id) end
     return nil, ("%s carries no spell %d, so %q names nothing here"):format(key, id, text)
   end
   local full = Names.NameIn(key, id, kind)
@@ -103,6 +145,29 @@ local function Refusal(key, bare)
   for _, id in ipairs(ids) do parts[#parts + 1] = ("%s_%d"):format(bare, id) end
   return ("%q names %d equally good spells in %s and which one your talents produce cannot "
     .. "be known here; write one of %s"):format(bare, #ids, key, table.concat(parts, ", "))
+end
+
+--- Why a bare name is not in the aura table FOR A PRESENCE BIND, which needs no row -- so
+--- "no tracked row" is the wrong thing to tell its author. When the ability inventory has the
+--- name, the only real refusal is that a bare slug cannot be CHECKED against an id, and this
+--- names the spelling that can be.
+local function PresenceRefusal(key, bare)
+  local by_spec = ns.Symbols.auraAmbiguous and ns.Symbols.auraAmbiguous[key]
+  local ids = by_spec and by_spec[bare]
+  if ids ~= nil then
+    local parts = {}
+    for _, id in ipairs(ids) do parts[#parts + 1] = ("%s_%d"):format(bare, id) end
+    return ("%q names %d tracked rows in %s; write one of %s"):format(
+      bare, #ids, key, table.concat(parts, ", "))
+  end
+  local by_name = IndexFor(key, "ability")
+  local known = by_name and by_name[bare]
+  if known ~= nil then
+    return ("%s tracks no aura row called %q. A presence bind needs no row and can still "
+      .. "watch it, but only spelled with its id, which is what makes the name checkable: "
+      .. "write %s_%d"):format(key, bare, bare, known)
+  end
+  return ("%s has no %q"):format(key, bare)
 end
 
 --- Why a bare name is not in the aura table: it may name two tracked rows rather than none,
@@ -171,6 +236,7 @@ function Names.Resolve(text, scope, kind)
       local suffixed, mismatch = ResolveSuffixed(key, bare, kind)
       if suffixed ~= nil then return suffixed end
       if mismatch ~= nil then return nil, mismatch end
+      if kind == "presence" then return nil, PresenceRefusal(key, bare) end
       if kind == "aura" then return nil, AuraRefusal(key, bare) end
       return nil, Refusal(key, bare)
     end
@@ -190,6 +256,7 @@ function Names.Resolve(text, scope, kind)
     local suffixed, mismatch = ResolveSuffixed(scope, text, kind)
     if suffixed ~= nil then return suffixed end
     if mismatch ~= nil then return nil, mismatch end
+    if kind == "presence" then return nil, PresenceRefusal(scope, text) end
     if kind == "aura" then return nil, AuraRefusal(scope, text) end
     return nil, Refusal(scope, text)
   end
@@ -201,7 +268,34 @@ end
 ---
 --- ⚠ Pass `scope` for anything that has to PARSE BACK: without it this answers the global
 --- name, which inside a spec that gave the bare slug to another id reads back as that id.
-function Names.Of(spellID, scope)
+---
+--- ⚠ `kind` picks the namespace and an AURA needs it. The two tables are disjoint, so an
+--- aura id the ability inventory does not carry answers nil without it -- and every
+--- `aura()`, `refreshable()`, `.stacks`, `.up` and `.remains` an export writes comes through
+--- here, so omitting it prints a rule set full of bare numbers.
+function Names.Of(spellID, scope, kind)
+  if kind == "presence" then
+    local tracked = Names.Of(spellID, scope, "aura")
+    if tracked ~= nil then return tracked end
+    -- No tracked row names it, so the ability inventory might -- and the SUFFIXED form is the
+    -- only spelling that parses back, a bare slug being refused on that path.
+    if scope == nil then return nil end
+    local ability = Names.NameIn(scope, spellID)
+    if ability == nil then return nil end
+    return ("%s_%d"):format(ability, spellID)
+  end
+  if kind == "aura" then
+    -- Only a name this scope RESOLVES BACK to the same id, because that is the contract:
+    -- `Rules.Describe` and `DescribeBind` have to parse. The aura table is global while the
+    -- resolver reads one spec's tracked set, so a name in the table is not automatically a
+    -- name this rule set may write.
+    if scope == nil then return nil end
+    local name = ns.Symbols.auraNames[spellID]
+    if name == nil then return nil end
+    local by_name = IndexFor(scope, "aura")
+    if by_name == nil or by_name[name] ~= spellID then return nil end
+    return name
+  end
   if scope ~= nil and ns.Symbols.specs[scope] ~= nil then
     return Names.NameIn(scope, spellID)
   end

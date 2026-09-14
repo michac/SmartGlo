@@ -6,6 +6,7 @@ local Store = {}
 ns.Store = Store
 
 local db
+local chardb
 
 --- Profiles live in source and are handed out by value: an applied rule the player then
 --- edits must not write back into the table the next `/sg profile` reads.
@@ -102,6 +103,12 @@ function Store.Load()
   if type(SmartGloDB.settings) ~= "table" then SmartGloDB.settings = {} end
   db = SmartGloDB
   ns.db = db
+  -- A SECOND saved file, per character. The rules themselves are account-wide -- one applied
+  -- set, whichever character applied it -- and auto-loading is the one thing that cannot be:
+  -- it is the answer to "what does THIS character want", asked at every login.
+  if type(SmartGloCharDB) ~= "table" then SmartGloCharDB = {} end
+  chardb = SmartGloCharDB
+  ns.chardb = chardb
   -- Rules stored before the two bowls carry `show` and `count`; they mean what `when` and a
   -- count `bind` mean now, so they are rewritten on the way in rather than handled twice.
   for _, glow in ipairs(db.glows) do ns.Rules.Modernize(glow) end
@@ -158,10 +165,11 @@ function Store.SetForSubject(spellID, list)
   ns.Attach.Refresh()
   ns.Count.Rebuild()
   ns.Presence.Rebuild()
+  ns.Remains.Rebuild()
   return true
 end
 
---- Flat per-character switches, beside the rules rather than inside them: a setting is not a
+--- Flat account-wide switches, beside the rules rather than inside them: a setting is not a
 --- rule and must not ride the import/export string a rule set travels in.
 function Store.Setting(key)
   return db and db.settings and db.settings[key]
@@ -170,6 +178,16 @@ end
 function Store.SetSetting(key, value)
   if db == nil then return end
   db.settings[key] = value
+end
+
+--- The per-character half. Same flat shape, a different file.
+function Store.CharSetting(key)
+  return chardb and chardb[key]
+end
+
+function Store.SetCharSetting(key, value)
+  if chardb == nil then return end
+  chardb[key] = value
 end
 
 --- Does any applied rule name this subject? The proc suppression is scoped to rows we speak
@@ -194,7 +212,29 @@ function Store.Replace(list)
   ns.Attach.Refresh()
   ns.Count.Rebuild()
   ns.Presence.Rebuild()
+  ns.Remains.Rebuild()
   return true
+end
+
+--- Have the applied rules been touched since the profile was taken? Nil when nothing was
+--- applied from a profile, or when the copy predates stamping and no comparison can tell.
+function Store.Edited()
+  local applied = db and db.settings and db.settings.profileStamp
+  if applied == nil then return nil end
+  return Stamp(db.glows) ~= applied
+end
+
+--- The one door for taking a profile: the checker runs, and a refusal changes nothing. What
+--- was applied and what it looked like are both recorded -- the name says which source to read
+--- next login, the stamp says whether the copy has been touched since.
+function Store.ApplyProfile(name)
+  local profile = ns.Profiles.Get(name)
+  if profile == nil then return nil, { ("no profile %q"):format(tostring(name)) } end
+  local ok, errs = Store.Replace(Copy(profile.glows))
+  if ok == nil then return nil, errs end
+  db.settings.profile = string.lower(name)
+  db.settings.profileStamp = ProfileStamp(profile)
+  return profile
 end
 
 ns.RegisterCommand{
@@ -207,21 +247,16 @@ ns.RegisterCommand{
       ns.Printf("profiles: %s", table.concat(ns.Profiles.Names(), ", "))
       return
     end
-    local profile = ns.Profiles.Get(name)
-    if profile == nil then
+    if ns.Profiles.Get(name) == nil then
       ns.Printf("no profile %q. Known: %s", name, table.concat(ns.Profiles.Names(), ", "))
       return
     end
-    local ok, errs = Store.Replace(Copy(profile.glows))
-    if ok == nil then
+    local profile, errs = Store.ApplyProfile(name)
+    if profile == nil then
       ns.Printf("profile %s was refused:", name)
       for _, err in ipairs(errs) do ns.Print("  " .. err) end
       return
     end
-    -- What was applied, and what it looked like. A later login compares both: the name says
-    -- which source to read, the stamp says whether the copy has been touched since.
-    db.settings.profile = string.lower(name)
-    db.settings.profileStamp = ProfileStamp(profile)
     ns.Printf("loaded profile %s (%d glows).", profile.label, #profile.glows)
   end,
 }

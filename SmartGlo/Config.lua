@@ -76,8 +76,13 @@ local function Detail(subject)
       lines[#lines + 1] = "      when   " .. ns.Rules.Describe(glow.when)
     end
     if glow.bind ~= nil then
+      -- The arm report comes from whichever container owns the bind; asking Count about a
+      -- remains bind answers "no count element", which reads as a fault rather than as the
+      -- wrong question.
+      local report = ns.Remains.Owns(glow) and ns.Remains.Describe(subject)
+        or ns.Count.Describe(subject)
       lines[#lines + 1] = ("      bind   %s -- %s"):format(
-        ns.Rules.DescribeBind(glow.bind), ns.Count.Describe(subject))
+        ns.Rules.DescribeBind(glow.bind), report)
     end
   end
   return table.concat(lines, "\n")

@@ -92,8 +92,10 @@ ns.RegisterCommand{
           .. "section is listed, Bindings.xml did not load and that is ours to fix.")
       end
     end
+    ns.Auto.ReportStatus()
     ns.Attach.ReportStatus()
     ns.Count.ReportStatus()
+    ns.Remains.ReportStatus()
   end,
 }
 
@@ -142,6 +144,9 @@ loader:SetScript("OnEvent", function()
   SLASH_SMARTGLO1 = "/sg"
   SlashCmdList.SMARTGLO = Dispatch
   ns.Store.Load()
+  -- A character that asked for its spec's profile takes it before anything reads the store,
+  -- so the prime below and the attach path both see the rules this character wants.
+  ns.Auto.OnLogin()
   -- Before the attach path asks, and while we are as close to certainly out of combat as a
   -- login gets. `PLAYER_REGEN_ENABLED` repairs it if this one landed inside a fight.
   ns.Rules.PrimeTalents()

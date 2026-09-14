@@ -4,6 +4,7 @@
 ## Author: Michael Christiansen
 ## Version: 0.3.73
 ## SavedVariables: SmartGloDB
+## SavedVariablesPerCharacter: SmartGloCharDB
 
 Capture.lua
 Core.lua
@@ -17,10 +18,12 @@ Parse.lua
 Wire.lua
 Profiles.lua
 Store.lua
+Auto.lua
 Overlay.lua
 Attach.lua
 Count.lua
 Presence.lua
+Remains.lua
 Procs.lua
 Duration.lua
 Health.lua

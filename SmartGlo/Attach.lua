@@ -45,6 +45,7 @@ local bound = {}
 local auraLatch = {}
 local auraHeard = {}
 local latchWarned = {}
+local pandemicWarned = {}
 --- [aura] = { {item, isBuffViewer}, ... }. Rebuilt every flush beside `bound`, for the same
 --- reason: a frame list that survives pool reuse is wrong rather than stale.
 local auraFrames = {}
@@ -168,7 +169,9 @@ local function WantedAuras()
     while #stack > 0 do
       local term = table.remove(stack)
       if type(term) == "table" then
-        if term.t == "aura" then wanted[term.spell] = true end
+        -- `refreshable()` reads the same rows as `aura()`, so an aura named ONLY by a
+        -- refreshable term still has to be hooked and have its frames collected.
+        if term.t == "aura" or term.t == "refreshable" then wanted[term.spell] = true end
         if type(term.terms) == "table" then
           for _, sub in ipairs(term.terms) do stack[#stack + 1] = sub end
         end
@@ -295,6 +298,97 @@ function Attach.AuraLatch(auraSpellID)
   return auraLatch[auraSpellID] or ns.UNKNOWN
 end
 
+-- ------------------------------------------------- the refresh window, off the same frames
+--
+-- `item.PandemicIcon` is the client's own answer to a predicate an addon may not evaluate:
+-- `CheckPandemicTimeDisplay` runs every frame from the item's `OnUpdate` and shows/hides the
+-- pandemic state frame, setting and nil'ing this field, so `~= nil` mirrors
+-- `IsInPandemicTime` exactly and clears on a refresh (cooldown-manager.md §7 Tier 2,
+-- security-taint-and-restricted-data.md §4.11). The window is Blizzard's own arithmetic --
+-- `GetRefreshExtendedDuration - GetAuraBaseDuration` -- so it matches an APL's `refreshable`
+-- rather than approximating it.
+--
+-- ⚠ ASSUMED, not re-measured. The only measurement is `[client 2026-07-31]` at 12.0.7, on
+-- Destruction/Immolate; it has not been restamped for 12.1 and has never been read on a
+-- druid. The failure direction is what makes assuming it acceptable: a field gone at 12.1
+-- reads nil on every frame, so every `refreshable()` term answers F and every rule using one
+-- stays DARK forever. Dark is this addon's failure direction. It is never bright and wrong.
+
+local ALERT_PANDEMIC_TIME = 2
+
+--- Does the client itself say this row can ever raise `PandemicTime`? The list is the
+--- settings UI's offer for every other alert, but for this one alone it is a HARD gate:
+--- `CanTriggerAlertType` is consulted in exactly one place, the pandemic arming path
+--- (cooldown-manager.md §7 Tier 1). So here, and only here, "not reported eligible" really
+--- does mean the row produces no window -- a self-buff (`GetAuraDataUnit() ~= "target"`) or
+--- an aura with no carry-over never arms one.
+local function RaisesPandemic(item)
+  if type(C_CooldownViewer) ~= "table"
+      or type(C_CooldownViewer.GetValidAlertTypes) ~= "function" then
+    return nil
+  end
+  local id = CooldownIDOf(item)
+  if id == nil then return nil end
+  local ok, types = pcall(C_CooldownViewer.GetValidAlertTypes, id)
+  if not ok or type(types) ~= "table" then return nil end
+  for _, alert in ipairs(types) do
+    if alert == ALERT_PANDEMIC_TIME then return true end
+  end
+  return false
+end
+
+--- true | false | nil, where nil means "this frame cannot say" and never "absent" -- the
+--- same three values `ReadFieldPresence` returns, for the same reason.
+---
+--- ⚠ A nil `PandemicIcon` is TWO worlds and they must not be collapsed into false: either the
+--- aura is simply not in its refresh window, or the row never produces a window at all. The
+--- eligibility check is what tells them apart, so it runs FIRST and a row that cannot say
+--- refuses rather than reporting absence.
+local function ReadPandemic(item)
+  local eligible = RaisesPandemic(item)
+  if eligible ~= true then return nil, eligible end
+  local ok, icon = pcall(function() return item.PandemicIcon end)
+  if not ok then return nil, true end
+  if ns.IsSecret(icon) then return nil, true end
+  return icon ~= nil, true
+end
+
+--- The refresh window across every frame carrying the aura: true from the first eligible
+--- frame that is in it, false when an eligible frame answered and none was, and nil plus a
+--- reason when no frame could be asked at all.
+---
+--- Returns `level, why`. `nil` is a REFUSAL and the caller must report it as UNKNOWN: an
+--- ineligible row and a row in no window are different facts, and reporting the first as F
+--- is the shape rule-language.md §3 forbids.
+function Attach.PandemicLevel(auraSpellID)
+  local frames = auraFrames[auraSpellID]
+  if frames == nil or #frames == 0 then
+    return nil, "no Cooldown Manager row is bound to it"
+  end
+  local anyEligible, anyRefused = false, false
+  for _, entry in ipairs(frames) do
+    local inWindow, eligible = ReadPandemic(entry[1])
+    if eligible == true then anyEligible = true end
+    if eligible == nil then anyRefused = true end
+    if inWindow == true then return true end
+  end
+  if anyEligible then return false end
+  -- Three ways to have no answer, and they name different remedies -- so they are three
+  -- strings, not one. `nil` eligibility is the client refusing to say; `false` is the client
+  -- saying this row has no window to be in.
+  local why = anyRefused
+    and "the client would not report its alert eligibility"
+    or "its row raises no pandemic alert, so this aura has no refresh window"
+  -- Once per aura per flush: this is read on every evaluation, and the fact worth recording
+  -- is that no row can answer, not how many times something asked.
+  if not pandemicWarned[auraSpellID] then
+    pandemicWarned[auraSpellID] = true
+    ns.log:Mark("refreshable %s UNKNOWN -- %s", ns.Capture.Safe(ns.Rules.Label(auraSpellID)),
+      ns.Capture.Safe(why))
+  end
+  return nil, why
+end
+
 -- ---------------------------------------------------------------- the rebuild
 
 local TakeSources
@@ -409,6 +503,7 @@ local function Flush()
   local wanted = WantedAuras()
   auraHeard = {}
   latchWarned = {}
+  pandemicWarned = {}
   auraFrames = {}
   for aura in pairs(wanted) do
     if auraLatch[aura] == nil then auraLatch[aura] = ns.UNKNOWN end
@@ -510,6 +605,11 @@ end
 
 --- Every sealed family that writes the mark's alpha itself, so `Overlay.SetLit` must leave
 --- that channel alone for all of them.
+--- ⚠ `Remains.Owns` is deliberately ABSENT here, and it reads like an omission. It is the
+--- same call the count family makes: a banded occluder rides OVER a mark that is normally
+--- lit, so the gate must keep owning that mark's alpha -- the sealed half only takes the
+--- occluder away. A family listed here would have the gate stop writing alpha and the mark
+--- would never go dark.
 local function SealsAlpha(glow)
   return ns.Duration.Owns(glow) or ns.Health.Owns(glow) or ns.Power.Owns(glow)
     or ns.Presence.Owns(glow)
@@ -547,6 +647,7 @@ function Attach.Evaluate()
   ns.Health.Refresh()
   ns.Power.Refresh()
   ns.Presence.Rebuild()
+  ns.Remains.Rebuild()
   ns.Procs.Refresh()
 end
 
@@ -754,6 +855,9 @@ local function Report(only)
       elseif ns.Presence.Owns(glow) then
         lines[#lines + 1] = ("    [sealed] %s -- %s"):format(ns.Rules.DescribeBind(glow.bind),
           ns.Presence.Describe(glow))
+      elseif ns.Remains.Owns(glow) then
+        lines[#lines + 1] = ("    [sealed] %s -- %s"):format(ns.Rules.DescribeBind(glow.bind),
+          ns.Remains.Describe(glow.subject))
       elseif ns.Health.Owns(glow) then
         lines[#lines + 1] = ("    %s -- %s"):format(ns.Health.Describe(glow.bind),
           ns.Rules.DescribeBind(glow.bind))

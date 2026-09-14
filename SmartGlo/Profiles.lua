@@ -8,6 +8,9 @@ local _, ns = ...
 local Profiles = {}
 ns.Profiles = Profiles
 
+--- A profile carrying `spec` is the one `/sg enable` may pick for that spec; `hero` names the
+--- tree it was transcribed for, and the talent that proves you are in it. Both are optional:
+--- a profile without `spec` can only be asked for by name.
 Profiles.list = {
   -- ⚠ Every shard threshold in both Demonology profiles is `projected`: the count as it will
   -- stand once the cast in flight lands. Shards are debited at COMPLETION, so mid-cast the bar
@@ -50,6 +53,8 @@ Profiles.list = {
   -- list in rules/demonology-diabolist.sg.
   ["demonology-diabolist"] = {
     label = "Demonology — Diabolist",
+    spec = "warlock.demonology",
+    hero = { tree = "Diabolist", talent = 428514 },
     glows = {
       {
         name = "Tyrant at five shards",
@@ -197,6 +202,8 @@ Profiles.list = {
   -- from Light's Deliverance, a TEMPLAR talent, which this tree does not have.
   ["retribution-herald"] = {
     label = "Retribution — Herald of the Sun",
+    spec = "paladin.retribution",
+    hero = { tree = "Herald of the Sun", talent = 431377 },
     glows = {
       {
         name = "Wake of Ashes",
@@ -315,6 +322,8 @@ Profiles.list = {
   -- hand-editing here.
   ["havoc-felscarred"] = {
     label = "Havoc — Fel-Scarred",
+    spec = "demon_hunter.havoc",
+    hero = { tree = "Fel-Scarred", talent = 452402 },
     glows = {
       {
         name = "Immolation Aura drained before Metamorphosis",
@@ -540,6 +549,8 @@ Profiles.list = {
   -- than hand-editing here.
   ["balance-eluneschosen"] = {
     label = "Balance — Elune's Chosen",
+    spec = "druid.balance",
+    hero = { tree = "Elune's Chosen", talent = 424058 },
     glows = {
       {
         name = "Fury of Elune on cooldown",
@@ -680,6 +691,8 @@ Profiles.list = {
   -- than hand-editing here.
   ["protection-lightsmith"] = {
     label = "Protection — Lightsmith",
+    spec = "paladin.protection",
+    hero = { tree = "Lightsmith", talent = 432459 },
     glows = {
       {
         name = "Word of Glory free and hurt",
@@ -1046,6 +1059,17 @@ function Profiles.Names()
   for name in pairs(Profiles.list) do names[#names + 1] = name end
   table.sort(names)
   return names
+end
+
+--- Every profile that claims this spec scope (`warlock.demonology`), in name order.
+--- A profile with no `spec` -- the starter set, the probes -- is never auto-matched: it is
+--- something you ask for by name, and `/sg enable` must not hand one out.
+function Profiles.ForSpec(key)
+  local out = {}
+  for _, name in ipairs(Profiles.Names()) do
+    if Profiles.list[name].spec == key then out[#out + 1] = name end
+  end
+  return out
 end
 
 function Profiles.Get(name)
